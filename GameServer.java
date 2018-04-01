@@ -1,3 +1,4 @@
+import java.sql.SQLException;
 import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
@@ -27,22 +28,22 @@ public class GameServer {
 	private Connection conn;
 	private Session sess;
 	private MessageProducer activeGameQueueSender;
-
+	private DBConnection dbConn;
 
 	public static void main(String[] args) {
 		String host = "localhost";
 		GameServer gameServer = null;
-		
+
 		try {
 			gameServer = new GameServer(host);
 
 			// Call this thread object when the program shuts down (cleanly)
 			ShutDownThread sdT = new ShutDownThread(gameServer);
 			Runtime.getRuntime().addShutdownHook(sdT);
-			
+
 			// Uncomment this to clear the queues
-			//System.exit(0);
-			
+			// System.exit(0);
+
 			// This function should run forever.
 			gameServer.manageGames();
 		} catch (NamingException | JMSException | InterruptedException e) {
@@ -56,10 +57,17 @@ public class GameServer {
 			}
 		}
 	}
-	
 
 	public GameServer(String host) throws NamingException, JMSException {
 		this.host = host;
+		try {
+			dbConn = new DBConnection();
+		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException | SQLException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			System.exit(-1);
+		}
+
 		localPlayerQueue = new LinkedList<String>();
 		localPotentialGames = new LinkedList<PotentialGame>();
 		localActiveGames = new LinkedList<Game>();
@@ -74,9 +82,9 @@ public class GameServer {
 		// Create connection->session->sender
 		createConnection();
 		createSession();
-		createSender();	
+		createSender();
 	}
-	
+
 	private void createSender() throws JMSException {
 		try {
 			activeGameQueueSender = sess.createProducer(activeGameQueue);
@@ -85,37 +93,72 @@ public class GameServer {
 			throw e;
 		}
 	}
+	
+	public Game DecodeGameMessage(String gameMessage) {
+		System.out.println("Decoding: " + gameMessage);
+		String thisGame = gameMessage;
+		// Decode the message
+		String[] values = thisGame.split(",");
+		String gameId = values[0];
+		String[] playerRaw = values[1].split("&");
+		String[] cards = values[2].split("&");
+
+		// Each row is a player, each of the two cells are id and name respectively.
+		String[][] playerInfo = new String[playerRaw.length][2];
+		Player[] players = new Player[playerRaw.length];
+
+		// Input format is "id-name"
+		for (int i = 0; i < playerRaw.length; i++) {
+			playerInfo[i] = playerRaw[i].split("-");
+			players[i] = new Player(playerInfo[i][1], playerInfo[i][0]);
+			System.out.println("Player in this game: " + playerInfo[i][1].toString());
+		}
+
+		Game g = new Game(players[0]);
+		g.SetId(gameId);
+		g.SetCards(cards);
+
+		// j = 1, because the first player was already passed
+		for (int j = 1; j < playerRaw.length; j++) {
+			g.SetPlayer(j, players[j]);
+		}
+
+		return g;
+	}
 
 	private void ActivateGame(PotentialGame pg, int indexInLocalList) throws JMSException {
-		// Ensure the game has a unique Id
-		pg.game.InitialiseId();
-		
-		TextMessage msg = sess.createTextMessage();
-		String gameId = pg.game.GetId();
+		String gameId = dbConn.getValidId("game");
 		String players = pg.game.GetPlayersString("&");
 		String cards = pg.game.GetCardsString("&");
+		// Ensure the game has a unique Id
+		pg.game.InitialiseId(gameId);
+
+		dbConn.addGameToDB(pg.game);
 		
+
+		TextMessage msg = sess.createTextMessage();
+
 		// csv the values
-		msg.setText(gameId+","+players+","+cards);
+		msg.setText(gameId + "," + players + "," + cards);
 		activeGameQueueSender.send(msg);
 		// send non-text control message to end
-		//activeGameQueueSender.send(sess.createMessage());
-		
-		// Now that the game has been activated, we can remove it from the local potentialGame list
+		// activeGameQueueSender.send(sess.createMessage());
+
+		// Now that the game has been activated, we can remove it from the local
+		// potentialGame list
 		localPotentialGames.remove(indexInLocalList);
 	}
-	
+
 	private void ActivateGamesThatAreReady() {
 		// games that have waited long enough can start
 		for (int g = 0; g < localPotentialGames.size(); g++) {
 			PotentialGame thisPg = localPotentialGames.get(g);
-			
-			
+
 			// If waiting longer than 10 sec, and > 1 player...
 			if (thisPg.waitingTime > 10 && thisPg.game.GetNumberOfPlayers() > 1) {
 				// Game can start!
-				System.out.println("Game {} has been waiting: " + thisPg.waitingTime
-						+ " seconds. It will now be started.");
+				System.out.println(
+						"Game {} has been waiting: " + thisPg.waitingTime + " seconds. It will now be started.");
 				try {
 					ActivateGame(thisPg, g);
 				} catch (JMSException e) {
@@ -175,22 +218,20 @@ public class GameServer {
 				}
 			}
 
-			
 			// get all waiting players, add the to the local linked list of players
 			try {
-				//System.err.println("Trying to receive playerqueue");
+				// System.err.println("Trying to receive playerqueue");
 				receiveMessages(playerQueue, localPlayerQueue);
-				System.out.println("Local player queue size: "+localPlayerQueue.size());
+				System.out.println("Local player queue size: " + localPlayerQueue.size());
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 
-			
 			IncrementTimers(1);
 		}
 	}
-	
+
 	private void IncrementTimers(int i) throws InterruptedException {
 		TimeUnit.SECONDS.sleep(i);
 		// Increment game waiting timers by one second
@@ -262,14 +303,14 @@ public class GameServer {
 				TextMessage textMessage = (TextMessage) m;
 				System.err.println("Received message: " + textMessage.getText());
 				localQueue.add(textMessage.getText());
-				
+
 			} else {
 				queueReceiver.close();
 				break;
 			}
 		}
 	}
-	
+
 	public void killMessages(Queue relevantQueue) throws JMSException {
 		System.err.println("Killing queue messages..");
 		createReceiver(relevantQueue);
@@ -303,21 +344,21 @@ public class GameServer {
 			throw e;
 		}
 	}
-	
+
 	public void clearQueues() {
-		try {		
+		try {
 			if (playerQueue != null) {
-					killMessages(playerQueue);
+				killMessages(playerQueue);
 			}
 			if (activeGameQueue != null) {
 				killMessages(activeGameQueue);
-		}
+			}
 		} catch (JMSException e) {
 			System.err.println("Failed to kill queue messages on close");
 			e.printStackTrace();
 		}
 	}
-	
+
 	public void close() {
 		clearQueues();
 		if (conn != null) {

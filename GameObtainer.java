@@ -31,234 +31,233 @@ public class GameObtainer {
 	private MessageConsumer queueReceiver;
 	private LinkedList<String> localActiveGames;
 	public Game game;
-		
-		public GameObtainer(String host){ //TODO: consider passing Player object reference
-			this.host = host;
-			localActiveGames = new LinkedList<String>();
-		}
-		
-		public boolean Initialise() {
-			// Access JNDI
-			try {
-				game = null;
-				createJNDIContext();
-				// Lookup JMS resources
-				lookupConnectionFactory();
-				lookupQueues();
-				
-				// Create connection->session->sender
-				createConnection();
-				createSession();
 
-				return true;
-				
-			} catch (NamingException | JMSException e) {
-				// TODO Auto-generated catch block
-				System.out.println("Failed to create connection to Glassfish JMS instance");
-				e.printStackTrace();
-				return false;
-			}	
-		}
-		
-		/*
-		 * Append a playerID to the game list
-		 */
-		public void enqueuePlayer(Player player) throws JMSException {
-			createSender();	
-			TextMessage msg = sess.createTextMessage();
-			msg.setText(player.name+","+player.id);
-			playerQueueSender.send(msg);
-			// send non-text control message to end
-			//playerQueueSender.send(sess.createMessage());
-		}
-		
-		public Game DecodeGameMessage(String gameMessage) {
-			System.out.println("Decoding: " + gameMessage);
-			String thisGame = gameMessage;
-			// Decode the message
-			String[] values = thisGame.split(",");
-			String gameId = values[0];
-			String[] playerRaw = values[1].split("&");
-			String[] cards = values[2].split("&");
-			
-			
-			// Each row is a player, each of the two cells are id and name respectively.
-			String[][] playerInfo = new String[playerRaw.length][2];
-			Player[] players = new Player[playerRaw.length];
-			
-			// Input format is "id-name"
-			for (int i = 0; i < playerRaw.length; i++) {
-				playerInfo[i] = playerRaw[i].split("-");
-				players[i] = new Player(playerInfo[i][1], playerInfo[i][0]);
-				System.out.println("Player in this game: " + playerInfo[i][1].toString());
-			}
-			
-			Game g = new Game(players[0]);	
-			g.SetId(gameId);
-			g.SetCards(cards);
-			
-			// j = 1, because the first player was already passed
-			for (int j = 1; j < playerRaw.length; j++) {
-				g.SetPlayer(j, players[j]);
-			}			
-			
-			return g;
-		}
-		
-		public Game FindActiveGameWithPlayer(Player player) throws JMSException {		
-			// Read queue without consuming messages
-            QueueBrowser queueBrowser = sess.createBrowser(activeGameQueue);
-			Enumeration msgs = queueBrowser.getEnumeration();
-			
-			// Get every game in the list
-			while (msgs.hasMoreElements()) {
-				String thisGame;
-				try {
-					thisGame = ((TextMessageImpl)msgs.nextElement()).getText();
-				}
-				catch(ClassCastException e) {
-					System.err.println("Tried to parse a message that was not text-based.");
-					thisGame = null;
-					continue; // Skip this iteration
-				}
-				
-				System.out.println(thisGame);
-				
-				Game g = DecodeGameMessage(thisGame);
-				
-				// For this game, we check if any of the players match the player we are searching for
-				for (int i = 0; i < 4; i++) {
-					System.out.println(g.GetPlayers()[i].id);
-					if (g.GetPlayers()[i].id.equals(player.id)) {
-						// ding ding! 
-						System.out.println("Player: "+player.id+" has found their game, and "
-								+ "it is active, and ready to be played.");
-						// game is good to go!
-						return g;
-					}
-				}
-			}
-			return null;
-		}
-		
-		/*
-		 * Get a game 
-		 */
-		public Game GetGame(Player player) throws JMSException, InterruptedException {
-			
-			if (game == null) {
-				// Add player to the list of seeking players
-				enqueuePlayer(player);			
-				System.out.println("Getting Game for: "+player.name);
-	
-				// Every 1 second, try and read available game list
-				while(game == null) {
-					game = FindActiveGameWithPlayer(player);
-					TimeUnit.SECONDS.sleep(1);
-				}
-			}
-			return game;
-		}
-		
-		private void createJNDIContext() throws NamingException {
-			try {
-				
-				System.setProperty("org.omg.CORBA.ORBInitialHost", host);
-				System.setProperty("org.omg.CORBA.ORBInitialPort", "3700");
-				
-				jndiContext = new InitialContext();
-				
-			} catch (NamingException e) {
-				System.err.println("Could not create JNDI API context: " + e);
-				throw e;
-			}
-		}
-		
-		private void lookupConnectionFactory() throws NamingException {
-			try {
-				connectionFactory = (ConnectionFactory)jndiContext.lookup("jms/GameConnectionFactory");
-			} catch (NamingException e) {
-				System.err.println("JNDI API JMS connection factory lookup failed: " + e);
-				throw e;
-			}
-		}
-		
-		private void lookupQueues() throws NamingException {
-
-			try {
-				playerQueue = (Queue)jndiContext.lookup("jms/PlayerQueue");
-				gameQueue = (Queue)jndiContext.lookup("jms/GameQueue");
-				activeGameQueue = (Queue)jndiContext.lookup("jms/ActiveGameQueue");
-			} catch (NamingException e) {
-				System.err.println("JNDI API JMS queue lookup failed: " + e);
-				throw e;
-			}
-		}
-		
-		/*
-		 * Parametrised, specify the JMS queue to pull from, as well as the local queue
-		 * to store results in
-		 */
-		public void receiveMessages(Queue relevantQueue, LinkedList<String> localQueue) throws JMSException {
-			createReceiver(relevantQueue);
-			while (true) {
-				// The library is designed to hang forever on this until a message is received.
-				Message m = queueReceiver.receive(2);// Timeout of x seconds
-				if (m != null && m instanceof TextMessage) {
-					TextMessage textMessage = (TextMessage) m;
-					System.out.println("Received message: " + textMessage.getText());
-					localQueue.add(textMessage.getText());
-
-				} else {
-					queueReceiver.close();
-					break;
-				}
-			}
-		}
-		
-		private void createReceiver(Queue relevantQueue) throws JMSException {
-			try {
-				queueReceiver = sess.createConsumer(relevantQueue);
-			} catch (JMSException e) {
-				System.err.println("Failed to create session: " + e);
-				throw e;
-			}
-		}
-		
-		private void createConnection() throws JMSException {
-			try {
-				conn = connectionFactory.createConnection();
-				conn.start();
-			} catch (JMSException e) {
-				System.err.println("Failed to create connection to JMS provider: " + e);
-				throw e;
-			}
-		}
-		private void createSession() throws JMSException {
-			try {
-				sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
-			} catch (JMSException e) {
-				System.err.println("Failed to create session: " + e);
-				throw e;
-			}
-		}
-		
-		// Was: QueueSender
-		private void createSender() throws JMSException {
-			try {
-				playerQueueSender = sess.createProducer(playerQueue);
-			} catch (JMSException e) {
-				System.err.println("Failed to create session: " + e);
-				throw e;
-			}
-		}
-		
-		public void close() {
-			if(conn != null) {
-				try {
-					conn.close();
-				} catch (JMSException e) { }
-			}
-		}
-		
+	public GameObtainer(String host) { // TODO: consider passing Player object reference
+		this.host = host;
+		localActiveGames = new LinkedList<String>();
 	}
+
+	public boolean Initialise() {
+		// Access JNDI
+		try {
+			game = null;
+			createJNDIContext();
+			// Lookup JMS resources
+			lookupConnectionFactory();
+			lookupQueues();
+
+			// Create connection->session->sender
+			createConnection();
+			createSession();
+			return true;
+		} catch (NamingException | JMSException e) {
+			// TODO Auto-generated catch block
+			System.out.println("Failed to create connection to Glassfish JMS instance");
+			e.printStackTrace();
+			return false;
+		}
+	}
+
+	/*
+	 * Append a playerID to the game list
+	 */
+	public void enqueuePlayer(Player player) throws JMSException {
+		createSender();
+		TextMessage msg = sess.createTextMessage();
+		msg.setText(player.name + "," + player.id);
+		playerQueueSender.send(msg);
+		// send non-text control message to end
+		// playerQueueSender.send(sess.createMessage());
+	}
+
+	public Game DecodeGameMessage(String gameMessage) {
+		System.out.println("Decoding: " + gameMessage);
+		String thisGame = gameMessage;
+		// Decode the message
+		String[] values = thisGame.split(",");
+		String gameId = values[0];
+		String[] playerRaw = values[1].split("&");
+		String[] cards = values[2].split("&");
+
+		// Each row is a player, each of the two cells are id and name respectively.
+		String[][] playerInfo = new String[playerRaw.length][2];
+		Player[] players = new Player[playerRaw.length];
+
+		// Input format is "id-name"
+		for (int i = 0; i < playerRaw.length; i++) {
+			playerInfo[i] = playerRaw[i].split("-");
+			players[i] = new Player(playerInfo[i][1], playerInfo[i][0]);
+			System.out.println("Player in this game: " + playerInfo[i][1].toString());
+		}
+
+		Game g = new Game(players[0]);
+		g.SetId(gameId);
+		g.SetCards(cards);
+
+		// j = 1, because the first player was already passed
+		for (int j = 1; j < playerRaw.length; j++) {
+			g.SetPlayer(j, players[j]);
+		}
+
+		return g;
+	}
+
+	public Game FindActiveGameWithPlayer(Player player) throws JMSException {
+		// Read queue without consuming messages
+		QueueBrowser queueBrowser = sess.createBrowser(activeGameQueue);
+		Enumeration msgs = queueBrowser.getEnumeration();
+
+		// Get every game in the list
+		while (msgs.hasMoreElements()) {
+			String thisGame;
+			try {
+				thisGame = ((TextMessageImpl) msgs.nextElement()).getText();
+			} catch (ClassCastException e) {
+				System.err.println("Tried to parse a message that was not text-based.");
+				thisGame = null;
+				continue; // Skip this iteration
+			}
+
+			System.out.println(thisGame);
+
+			Game g = DecodeGameMessage(thisGame);
+
+			// For this game, we check if any of the players match the player we are
+			// searching for
+			for (int i = 0; i < 4; i++) {
+				System.out.println(g.GetPlayers()[i].id);
+				if (g.GetPlayers()[i].id.equals(player.id)) {
+					// ding ding!
+					System.out.println("Player: " + player.id + " has found their game, and "
+							+ "it is active, and ready to be played.");
+					// game is good to go!
+					return g;
+				}
+			}
+		}
+		return null;
+	}
+
+	/*
+	 * Get a game
+	 */
+	public Game GetGame(Player player) throws JMSException, InterruptedException {
+
+		if (game == null) {
+			// Add player to the list of seeking players
+			enqueuePlayer(player);
+			System.out.println("Getting Game for: " + player.name);
+
+			// Every 1 second, try and read available game list
+			while (game == null) {
+				game = FindActiveGameWithPlayer(player);
+				TimeUnit.SECONDS.sleep(1);
+			}
+		}
+		return game;
+	}
+
+	private void createJNDIContext() throws NamingException {
+		try {
+
+			System.setProperty("org.omg.CORBA.ORBInitialHost", host);
+			System.setProperty("org.omg.CORBA.ORBInitialPort", "3700");
+
+			jndiContext = new InitialContext();
+
+		} catch (NamingException e) {
+			System.err.println("Could not create JNDI API context: " + e);
+			throw e;
+		}
+	}
+
+	private void lookupConnectionFactory() throws NamingException {
+		try {
+			connectionFactory = (ConnectionFactory) jndiContext.lookup("jms/GameConnectionFactory");
+		} catch (NamingException e) {
+			System.err.println("JNDI API JMS connection factory lookup failed: " + e);
+			throw e;
+		}
+	}
+
+	private void lookupQueues() throws NamingException {
+
+		try {
+			playerQueue = (Queue) jndiContext.lookup("jms/PlayerQueue");
+			gameQueue = (Queue) jndiContext.lookup("jms/GameQueue");
+			activeGameQueue = (Queue) jndiContext.lookup("jms/ActiveGameQueue");
+		} catch (NamingException e) {
+			System.err.println("JNDI API JMS queue lookup failed: " + e);
+			throw e;
+		}
+	}
+
+	/*
+	 * Parametrised, specify the JMS queue to pull from, as well as the local queue
+	 * to store results in
+	 */
+	public void receiveMessages(Queue relevantQueue, LinkedList<String> localQueue) throws JMSException {
+		createReceiver(relevantQueue);
+		while (true) {
+			// The library is designed to hang forever on this until a message is received.
+			Message m = queueReceiver.receive(2);// Timeout of x seconds
+			if (m != null && m instanceof TextMessage) {
+				TextMessage textMessage = (TextMessage) m;
+				System.out.println("Received message: " + textMessage.getText());
+				localQueue.add(textMessage.getText());
+
+			} else {
+				queueReceiver.close();
+				break;
+			}
+		}
+	}
+
+	private void createReceiver(Queue relevantQueue) throws JMSException {
+		try {
+			queueReceiver = sess.createConsumer(relevantQueue);
+		} catch (JMSException e) {
+			System.err.println("Failed to create session: " + e);
+			throw e;
+		}
+	}
+
+	private void createConnection() throws JMSException {
+		try {
+			conn = connectionFactory.createConnection();
+			conn.start();
+		} catch (JMSException e) {
+			System.err.println("Failed to create connection to JMS provider: " + e);
+			throw e;
+		}
+	}
+
+	private void createSession() throws JMSException {
+		try {
+			sess = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
+		} catch (JMSException e) {
+			System.err.println("Failed to create session: " + e);
+			throw e;
+		}
+	}
+
+	// Was: QueueSender
+	private void createSender() throws JMSException {
+		try {
+			playerQueueSender = sess.createProducer(playerQueue);
+		} catch (JMSException e) {
+			System.err.println("Failed to create session: " + e);
+			throw e;
+		}
+	}
+
+	public void close() {
+		if (conn != null) {
+			try {
+				conn.close();
+			} catch (JMSException e) {
+			}
+		}
+	}
+
+}
