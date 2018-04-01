@@ -33,16 +33,16 @@ public class GameServer {
 		String host = "localhost";
 		GameServer gameServer = null;
 		
-		// Add a shutdown hook, so we can ensure the queueueueus get cleared properly on shutdown
-		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-	        public void run() {
-	            System.out.println("In shutdown hook");
-	        }
-	    }, "Shutdown-thread"));
-		
 		try {
 			gameServer = new GameServer(host);
 
+			// Call this thread object when the program shuts down (cleanly)
+			ShutDownThread sdT = new ShutDownThread(gameServer);
+			Runtime.getRuntime().addShutdownHook(sdT);
+			
+			// Uncomment this to clear the queues
+			//System.exit(0);
+			
 			// This function should run forever.
 			gameServer.manageGames();
 		} catch (NamingException | JMSException | InterruptedException e) {
@@ -55,8 +55,6 @@ public class GameServer {
 				}
 			}
 		}
-		
-		
 	}
 	
 
@@ -101,7 +99,7 @@ public class GameServer {
 		msg.setText(gameId+","+players+","+cards);
 		activeGameQueueSender.send(msg);
 		// send non-text control message to end
-		activeGameQueueSender.send(sess.createMessage());
+		//activeGameQueueSender.send(sess.createMessage());
 		
 		// Now that the game has been activated, we can remove it from the local potentialGame list
 		localPotentialGames.remove(indexInLocalList);
@@ -182,7 +180,7 @@ public class GameServer {
 			try {
 				//System.err.println("Trying to receive playerqueue");
 				receiveMessages(playerQueue, localPlayerQueue);
-				System.out.println("Local queue size: "+localPlayerQueue.size());
+				System.out.println("Local player queue size: "+localPlayerQueue.size());
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -271,6 +269,20 @@ public class GameServer {
 			}
 		}
 	}
+	
+	public void killMessages(Queue relevantQueue) throws JMSException {
+		System.err.println("Killing queue messages..");
+		createReceiver(relevantQueue);
+		while (true) {
+			Message m = queueReceiver.receive(100); // wait 100ms
+			if (m != null && m instanceof TextMessage) {
+				continue;// Keep going until they're all consumed
+			} else {
+				queueReceiver.close();
+				break;
+			}
+		}
+	}
 
 	private void createSession() throws JMSException {
 		try {
@@ -291,9 +303,23 @@ public class GameServer {
 			throw e;
 		}
 	}
-
+	
+	public void clearQueues() {
+		try {		
+			if (playerQueue != null) {
+					killMessages(playerQueue);
+			}
+			if (activeGameQueue != null) {
+				killMessages(activeGameQueue);
+		}
+		} catch (JMSException e) {
+			System.err.println("Failed to kill queue messages on close");
+			e.printStackTrace();
+		}
+	}
+	
 	public void close() {
-		System.out.println("HELLO!!!O!O!O!O!!!!OO");
+		clearQueues();
 		if (conn != null) {
 			try {
 				conn.close();

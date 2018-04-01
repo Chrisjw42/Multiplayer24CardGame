@@ -44,7 +44,7 @@ public class MainWindow implements Runnable, ActionListener{
 	ScriptEngineManager manager;
 	ScriptEngine engine;
 	
-	private GameObtainer gO;
+	private GameObtainer gameObt;
 
 	private LoginClient parentClient;
 	private Game currentGame;
@@ -86,12 +86,12 @@ public class MainWindow implements Runnable, ActionListener{
 	public MainWindow(LoginClient client, Player player) {
 		playerLoggedIn = player;
 		
-		gO = new GameObtainer("localhost");
+		gameObt = new GameObtainer("localhost");
 		
 		boolean success = false;
 		// try to initialise three times
 		for (int i = 0; i < 3; i++) {
-			success = gO.Initialise();
+			success = gameObt.Initialise();
 			if (success == true) {
 				break; // stop trying
 			}	
@@ -396,7 +396,7 @@ public class MainWindow implements Runnable, ActionListener{
 	
 	public Game getGame() {
 		try {
-			Game serverResponse = gO.GetGame(playerLoggedIn);
+			Game serverResponse = gameObt.GetGame(playerLoggedIn);
 			return serverResponse;
 		} catch (JMSException | InterruptedException e) {
 			// TODO Auto-generated catch block

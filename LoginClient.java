@@ -5,6 +5,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
+import java.sql.SQLException;
 
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -14,6 +15,8 @@ import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+
+import org.apache.derby.tools.sysinfo;
 
 // CLIENT 
 
@@ -40,6 +43,8 @@ public class LoginClient implements Runnable, ActionListener {
 	private RegisterWindow regWindow;
 	private MainWindow mainWindow;
 	
+	private DBConnection dbConn;
+	
 	public Boolean Validate(String s) {
 		//System.out.println(s+s.getClass());
 		if (s.length() > 0) {	
@@ -54,23 +59,15 @@ public class LoginClient implements Runnable, ActionListener {
 	}
 	
 	public LoginClient(String host) {
-		
+		try {
+			dbConn = new DBConnection();
+		} catch (InstantiationException | IllegalAccessException | ClassNotFoundException | SQLException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+			System.exit(-1);
+		}
 		//TODO: Build gameobtainer here instead of on game request (slows down because of glassfish connection)
 		
-		try {
-			System.out.print("Accessing RMI to find server service...");
-			// Locate and store a reference to the registry 
-			// Registry is run by through "external tools" 
-			Registry reg = LocateRegistry.getRegistry(host);
-			
-			// Find the function stored in the registry by name 
-			loginServer = (RemoteInterface)reg.lookup("LoginServer");
-			
-			System.out.println("Success!");
-		}catch (Exception e) {
-			System.out.println("Failed.");
-			System.out.println(e);
-		}
 	}
 	
 	public void loginWindow() {
@@ -111,13 +108,6 @@ public class LoginClient implements Runnable, ActionListener {
 	}
 	
 	public void run() {
-		// Clear Online Users
-		try {
-			loginServer.clearOnlineUsers();
-		} catch (RemoteException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
 		
 		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
 			public void run() {
@@ -135,43 +125,17 @@ public class LoginClient implements Runnable, ActionListener {
 		
 	}
 	
-	/* Document Listener */
-	/*
-	public void insertUpdate(DocumentEvent e) {
-		System.out.println("insert");
-		new WordCountUpdater().execute();
-	}
-	public void removeUpdate(DocumentEvent e) {
-		System.out.println("remove");
-		new WordCountUpdater().execute();
-	}
-	public void changedUpdate(DocumentEvent e) {
-		System.out.println("changed");
-		new WordCountUpdater().execute();
-	}*/
-
-	/* Word count updater */
-	/*private class WordCountUpdater extends SwingWorker<Void, Void> {
-
-		protected Void doInBackground() {
-			updateCount();
-			return null;
-		}
-		protected void done() {
-			//wordCountLabel.setText(""+wordCount);
-			//wordCountLabel.invalidate();
-		}
-	}*/
-	
 	public Boolean attemptRegister(String uName, String uPwd) {
 		loginFrame.setEnabled(false);	
-		try {
-			loginServer.register(uName, uPwd);
-		} catch (RemoteException e) {
-			e.printStackTrace();
-			loginFrame.setEnabled(true);
+		if(dbConn.doesPlayerExist(uName)) {
+			JOptionPane.showMessageDialog(null, "This username is taken. Try again!");
 			return false;
 		}
+		String id = dbConn.getValidPlayerId();
+		
+		// Player is added to the database, registration complete!
+		dbConn.addPlayerToTable(id, uName, uPwd);
+		
 		loginFrame.setEnabled(true);
 		return true;
 	}
@@ -180,13 +144,28 @@ public class LoginClient implements Runnable, ActionListener {
 		mainWindow.main.setVisible(false);
 		mainWindow.main.dispose();
 		this.run();
+			}
+	
+	private boolean attemptLogin(String uName, String uPass) {
+		if (!dbConn.doesPlayerExist(uName)) {
+			JOptionPane.showMessageDialog(null, "This username cannot be found, try again or register.");
+			return false;
 		}
+		// player exists
+		if (dbConn.checkPlayerPwd(uName, uPass)) {
+			return true;
+		}
+		else {
+			JOptionPane.showMessageDialog(null, "This username and password do not match!");
+			return false;
+		}
+	}
 
 	@Override
 	public void actionPerformed(ActionEvent arg0) {
 		String uName = txtUsername.getText();
 		String uPwd = new String(txtUserpass.getPassword());
-		System.out.println(uPwd);
+			System.out.println(uPwd);
 		// Logging in
 		if (arg0.getActionCommand() == "Login") {
 			// If validation fails
@@ -196,22 +175,16 @@ public class LoginClient implements Runnable, ActionListener {
 			}
 			System.out.println(uName+"val passed.");
 			System.out.println("=== Login request");
-			try {
-				// If login success
-				if (loginServer.login(uName, uPwd)) {
-					
-					// TODO: Implement playerID
-					Player ply = new Player(uName, "abc123");
-					
-					// The main window is associated with one single player
-					mainWindow = new MainWindow(this, ply);
-					loginFrame.setVisible(false);
-					loginFrame.dispose();
-					mainWindow.run();
-				}
+			if (attemptLogin(uName, uPwd)) {
 				
-			} catch (RemoteException e) {
-				e.printStackTrace();
+				// TODO: Implement playerID
+				Player ply = new Player(uName, "abc123");
+				
+				// The main window is associated with one single player
+				mainWindow = new MainWindow(this, ply);
+				loginFrame.setVisible(false);
+				loginFrame.dispose();
+				mainWindow.run();
 			}
 		}	
 		// Registering
@@ -221,12 +194,6 @@ public class LoginClient implements Runnable, ActionListener {
 			loginFrame.setEnabled(false);
 			regWindow = new RegisterWindow(this);
 			regWindow.run();
-			
-			/*try {
-				loginServer.register(uName, uPwd);
-			} catch (RemoteException e) {
-				e.printStackTrace();
-			}*/
 			
 		}
 

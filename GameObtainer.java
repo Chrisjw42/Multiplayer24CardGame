@@ -30,24 +30,7 @@ public class GameObtainer {
 	private MessageProducer playerQueueSender;
 	private MessageConsumer queueReceiver;
 	private LinkedList<String> localActiveGames;
-
-	/*
-		public static void main(String [] args) {
-			String host = "localhost";
-			GameObtainer sender = null;
-			try {
-				sender = new GameObtainer(host);
-				//sender.sendMessages();
-			} catch (Exception e) {
-				System.err.println("Program aborted");
-			} finally {
-				if(sender != null) {
-					try {
-						sender.close();
-					} catch (Exception e) { }
-				}
-			}
-		}*/
+	public Game game;
 		
 		public GameObtainer(String host){ //TODO: consider passing Player object reference
 			this.host = host;
@@ -57,6 +40,7 @@ public class GameObtainer {
 		public boolean Initialise() {
 			// Access JNDI
 			try {
+				game = null;
 				createJNDIContext();
 				// Lookup JMS resources
 				lookupConnectionFactory();
@@ -85,27 +69,8 @@ public class GameObtainer {
 			msg.setText(player.name+","+player.id);
 			playerQueueSender.send(msg);
 			// send non-text control message to end
-			playerQueueSender.send(sess.createMessage());
+			//playerQueueSender.send(sess.createMessage());
 		}
-		
-		// Is this even necessary anymore?
-		/*
-		public void getGameQueue() throws JMSException {
-			createSession();
-			
-			// NOT using createConsumer, which would actually consume the messages			
-			// Read queue without consuming messages
-			
-            QueueBrowser queueBrowser = sess.createBrowser(gameQueue);
-			Enumeration msgs = queueBrowser.getEnumeration();
-			
-			// Get every game in the list
-			while (msgs.hasMoreElements()) {
-				
-				String thisGame = (String) msgs.nextElement();				
-				// TODO: check if thisGame's players includes this player
-			}
-		}*/
 		
 		public Game DecodeGameMessage(String gameMessage) {
 			System.out.println("Decoding: " + gameMessage);
@@ -180,31 +145,20 @@ public class GameObtainer {
 		 * Get a game 
 		 */
 		public Game GetGame(Player player) throws JMSException, InterruptedException {
-			// Add player to the list of seeking players
-			enqueuePlayer(player);
-			Game game = null;
 			
-			// Every 1 second, try and read available game list
-			while(game == null) {
-				TimeUnit.SECONDS.sleep(1);
-				game = FindActiveGameWithPlayer(player);
+			if (game == null) {
+				// Add player to the list of seeking players
+				enqueuePlayer(player);			
+				System.out.println("Getting Game for: "+player.name);
+	
+				// Every 1 second, try and read available game list
+				while(game == null) {
+					game = FindActiveGameWithPlayer(player);
+					TimeUnit.SECONDS.sleep(1);
+				}
 			}
 			return game;
 		}
-		
-		/*
-		public void sendMessages() throws JMSException {
-			createSession();
-			createSender();			
-			int count = 1 + new Random().nextInt(10);
-			TextMessage message = sess.createTextMessage(); 
-			for(int i=1; i<=count; ++i) {
-				message.setText("This is message "+i);
-				queueSender.send(message);
-				System.out.println("Sending message "+i);
-			}
-			queueSender.send(sess.createMessage());
-		}*/
 		
 		private void createJNDIContext() throws NamingException {
 			try {

@@ -101,7 +101,7 @@ public class RegisterWindow implements Runnable, ActionListener {
 			return;
 		}
 		
-		if(arg0.getActionCommand() == "Register") {	
+		if(arg0.getActionCommand() == "Register") {
 			if (parentClient.attemptRegister(uName, uPwd)) {
 				parentClient.loginFrame.setEnabled(true);
 				registerFrame.setVisible(false);
