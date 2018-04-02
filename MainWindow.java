@@ -343,7 +343,6 @@ public class MainWindow implements Runnable, ActionListener {
 		gameInputFeedback.setVisible(true);
 
 		// TODO: Fix the alignment of the label
-
 		gameInput.addKeyListener(new KeyAdapter() {
 			public void keyReleased(KeyEvent e) {
 				JTextField textField = (JTextField) e.getSource();

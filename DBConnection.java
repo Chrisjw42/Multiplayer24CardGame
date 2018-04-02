@@ -31,11 +31,14 @@ public class DBConnection {
 				.getConnection("jdbc:mysql://" + DB_HOST + "/" + DB_NAME + "?user=" + DB_USER + "&password=" + DB_PASS);
 		System.out.println("DB Connected successfully");
 		rng = new Random();
-		
+	}
+	
+	private void TestDBAddGame() {
+		//Testing
 		Game thisGame = new Game(new Player("q", "123"));
 		thisGame.AddPlayer(new Player("w", "234"));
 		thisGame.SetCards(new String[]{"10","11","6","3"});
-		thisGame.InitialiseId("456876");
+		thisGame.InitialiseId(getValidId("game"));
 		addGameToDB(thisGame);
 	}
 

@@ -28,7 +28,9 @@ public class GameServer {
 	private Connection conn;
 	private Session sess;
 	private MessageProducer activeGameQueueSender;
+	
 	private DBConnection dbConn;
+	// shutdown thread
 
 	public static void main(String[] args) {
 		String host = "localhost";
@@ -78,6 +80,14 @@ public class GameServer {
 		// Lookup JMS resources
 		lookupConnectionFactory();
 		lookupQueues();
+		
+		// Clear queues on startup (fight me)
+		if (playerQueue != null) {
+			killMessages(playerQueue);
+		}
+		if (activeGameQueue != null) {
+			killMessages(activeGameQueue);
+		}
 
 		// Create connection->session->sender
 		createConnection();
@@ -141,11 +151,12 @@ public class GameServer {
 		// csv the values
 		msg.setText(gameId + "," + players + "," + cards);
 		activeGameQueueSender.send(msg);
+		
+		/* left commmented, becuase deactivating seems to have no efffect, but the exmaple code includes it? */
 		// send non-text control message to end
-		// activeGameQueueSender.send(sess.createMessage());
+		// activeGameQueueSender.send(sess.createMessage()); 
 
-		// Now that the game has been activated, we can remove it from the local
-		// potentialGame list
+		// Now that game is activated, we can remove it from the local potentialGame list
 		localPotentialGames.remove(indexInLocalList);
 	}
 
@@ -204,7 +215,7 @@ public class GameServer {
 							System.out.println("Game found for: " + newPlayer.id);
 							gameFound = true;
 							pg.game.AddPlayer(newPlayer);
-							pg.ResetWaitingTime();
+							//pg.ResetWaitingTime();
 							pg.game.PrintPlayers();
 						}
 					}
