@@ -8,11 +8,11 @@ public class PotentialGame {
 		game = new Game(player); // Pretty sure this is fixed, just need to test.
 	}
 
-	public void IncrementWaitingTime(int i) {
+	public void incrementWaitingTime(int i) {
 		waitingTime += i;
 	}
 
-	public void ResetWaitingTime() {
+	public void resetWaitingTime() {
 		waitingTime = 0;
 	}
 }

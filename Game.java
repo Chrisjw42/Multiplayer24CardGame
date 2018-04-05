@@ -1,11 +1,20 @@
 import java.util.Random;
 
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
 public class Game {
 	private String id;
 	private Player[] players;
 	private int[] cards;
 	private Random rand;
 	private String[] suits;
+	private String[] answers;
+	private int[] scores;
+
+	ScriptEngineManager manager;
+	ScriptEngine engine;
 
 	private Player EmptyPlayer;
 
@@ -13,12 +22,18 @@ public class Game {
 	public Game(Player player) {
 		rand = new Random();
 		id = "unassigned";
+
+		manager = new ScriptEngineManager();
+		engine = manager.getEngineByName("js");
+
 		// Dummy player
 		EmptyPlayer = new Player("emptyplayer", "-1");
-
+		
 		suits = new String[] { "spades", "clubs", "diamonds", "hearts" };
 		cards = new int[4];
 		players = new Player[4];
+		answers = new String[] {null, null, null, null};
+		scores = new int[] {-1,-1,-1,-1};
 
 		// Initialise cards, empty player slots
 		for (int i = 0; i < 4; i++) {
@@ -32,7 +47,7 @@ public class Game {
 	/*
 	 * Assign a random suit (suits do not have influence on the card's value)
 	 */
-	public String GetFileNameFromCardNumber(int cardNum) {
+	public String getFileNameFromCardNumber(int cardNum) {
 		String prefix = "";
 
 		if (cardNum < 11 && cardNum > 1) {
@@ -53,8 +68,16 @@ public class Game {
 		// build filename
 		return "png/" + prefix + "_of_" + suits[s] + ".png";
 	}
+	
+	public boolean haveAllPlayersAnswered() {
+		for(int i = 0; i < getNumberOfPlayers(); i++) {
+			if (answers[i] == null)
+				return false; // false if any of them are empty
+		}
+		return true;
+	}
 
-	public boolean SpareSlot() {
+	public boolean isTherASpareSlot() {
 		for (int i = 0; i < 4; i++) {
 			if (players[i] == EmptyPlayer) {
 				return true;
@@ -63,7 +86,7 @@ public class Game {
 		return false;
 	}
 
-	public void AddPlayer(Player p) {
+	public void addPlayer(Player p) {
 		for (int i = 0; i < 4; i++) {
 			if (players[i] == EmptyPlayer) {
 				players[i] = p;
@@ -71,12 +94,16 @@ public class Game {
 			}
 		}
 	}
+	
+	public void setAnswer(int slot, String answer) {
+		answers[slot] = answer;
+	}
 
-	public int[] GetCards() {
+	public int[] getCards() {
 		return cards;
 	}
 
-	public String GetCardsString(String delimiter) {
+	public String getCardsString(String delimiter) {
 		String str = "";
 		for (int i = 0; i < 4; i++) {
 			// append each card value
@@ -87,17 +114,17 @@ public class Game {
 		return str;
 	}
 
-	public void SetCards(String[] cardsPass) {
+	public void setCards(String[] cardsPass) {
 		for (int i = 0; i < 4; i++) {
 			cards[i] = Integer.parseInt((cardsPass[i]));
 		}
 	}
 
-	public Player[] GetPlayers() {
+	public Player[] getPlayers() {
 		return players;
 	}
 
-	public String GetPlayersString(String delimiter) {
+	public String getPlayersString(String delimiter) {
 		String str = "";
 		for (int i = 0; i < 4; i++) {
 			if (players[i] != EmptyPlayer) {
@@ -114,11 +141,11 @@ public class Game {
 		return str;
 	}
 
-	public void SetPlayer(int idx, Player ply) {
+	public void setPlayer(int idx, Player ply) {
 		players[idx] = ply;
 	}
 
-	public void PrintPlayers() {
+	public void printPlayers() {
 		System.out.println("Players currently in game: ");
 		for (int i = 0; i < 4; i++) {
 			if (players[i] != EmptyPlayer) // Only print valid players
@@ -126,15 +153,15 @@ public class Game {
 		}
 	}
 
-	public void SetId(String idPass) {
+	public void setId(String idPass) {
 		id = idPass;
 	}
 
-	public String GetId() {
+	public String getId() {
 		return id;
 	}
 
-	public int GetNumberOfPlayers() {
+	public int getNumberOfPlayers() {
 		int n = 0;
 		for (int i = 0; i < 4; i++) {
 			if (players[i] != EmptyPlayer) {
@@ -144,8 +171,118 @@ public class Game {
 		return n;
 	}
 
-	public void InitialiseId(String idPass) {
+	public void initialiseId(String idPass) {
 		id = idPass;
 	}
+	
+	// Check if this card is actually in play
+	public boolean isCardValid(String value) {
+		// Convert JQK to int input
+		if (value.equals("J"))
+			value = "11";
+		else if (value.equals("Q"))
+			value = "12";
+		else if (value.equals("K"))
+			value = "13";
 
+		int parsed;
+		try {
+			parsed = Integer.parseInt(value);
+
+			// Check against all cards, if any match, then we're all G
+			for (int i = 0; i < 4; i++) {
+				if (parsed == getCards()[i]) {
+					return true;
+				}
+			}
+		} catch (Exception e) {
+			System.out.println(e.getStackTrace());
+		}
+		return false;
+
+	}
+	
+	public String calculateGameInput(String input) {
+		input = input.trim();
+		input = input.toUpperCase();
+
+		// Split apart all the elements that were used
+		String[] operands = input.split("[-+*/^()]");
+		for (int i = 0; i < operands.length; i++) {
+
+			// This can happen with double parens, for example
+			// So, if we're actually ealing with a used value
+			if (!operands[i].equals("") && operands[i] != null) {
+
+				// if the value is not in the game
+				if (!isCardValid(operands[i])) {
+					return "Card: [" + operands[i] + "] is not in play!";
+				}
+			}
+		}
+
+		// At this point, we are happy that the values used are actually available in
+		// this game
+		char[] inChar = input.toCharArray();
+
+		// Convert to string array
+		String[] inputArr = new String[input.length()];
+		for (int i = 0; i < input.length(); i++) {
+			inputArr[i] = Character.toString(inChar[i]);
+
+			// Convert JQKA to int input
+			if (inputArr[i].equals("J"))
+				inputArr[i] = "11";
+			else if (inputArr[i].equals("Q"))
+				inputArr[i] = "12";
+			else if (inputArr[i].equals("K"))
+				inputArr[i] = "13";
+			else if (inputArr[i].equals("A"))
+				inputArr[i] = "1";
+
+		}
+		// And now we have a string which equals the user input with the letters
+		// replaced
+		input = String.join("", inputArr);
+
+		Object result;
+		try {
+			result = engine.eval(input);
+		} catch (ScriptException e) {
+			// TODO Auto-generated catch block
+			// e.printStackTrace();
+			result = "Failed to parse, try using parentheses.";
+		}
+
+		if (result == null) {
+			return "Enter your answer! (use j, q, and k for face cards)";
+		}
+		return "= " + result;
+	}
+	
+	public String[] getWinners() {
+		calculatePlayerScores();
+		int min = 99999999;
+		String[] winners = new String[] {null,null,null,null};
+		
+		for (int i = 0; i < getNumberOfPlayers(); i++) {
+			if (scores[i] < min) {
+				min = scores[i];
+				winners[i] = players[i].getId();
+			}
+			// If the score is tied with the winning score
+			else if (scores[i] == min) {
+				winners[i] = players[i].getId();
+			}
+		}
+		return winners;
+	}
+	
+	private void calculatePlayerScores() {
+		for (int i = 0; i < getNumberOfPlayers(); i++) {
+			// Calculate the game input, then parse as an int
+			int result = Integer.parseInt(calculateGameInput(answers[i]));
+			scores[i] = Math.abs(24 - result);
+		}
+	}
 }

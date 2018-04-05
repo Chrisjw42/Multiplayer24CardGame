@@ -37,12 +37,12 @@ public class LoginClient implements Runnable, ActionListener {
 	private JPasswordField txtUserpass;
 	private JButton btnRegister;
 
-	public GameObtainer gameObt;
+	public JmsClient jmsClient;
 
 	private RegisterWindow regWindow;
 	private MainWindow mainWindow;
 
-	private DBConnection dbConn;
+	public DBConnection dbConn;
 
 	public Boolean Validate(String s) {
 		// System.out.println(s+s.getClass());
@@ -59,12 +59,12 @@ public class LoginClient implements Runnable, ActionListener {
 		try {
 			// Frontloading all the long connections to keep it snappy after loading
 			dbConn = new DBConnection();
-			gameObt = new GameObtainer(host);
+			jmsClient = new JmsClient(host);
 
 			boolean success = false;
 			// try to initialise three times
 			for (int i = 0; i < 3; i++) {
-				success = gameObt.Initialise();
+				success = jmsClient.initialise();
 				if (success == true) {
 					break; // stop trying
 				}

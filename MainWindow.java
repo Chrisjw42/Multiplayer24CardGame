@@ -16,9 +16,6 @@ import java.util.Random;
 
 import javax.imageio.ImageIO;
 import javax.jms.JMSException;
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
-import javax.script.ScriptException;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
@@ -40,13 +37,9 @@ public class MainWindow implements Runnable, ActionListener {
 
 	Random rand;
 
-	ScriptEngineManager manager;
-	ScriptEngine engine;
-
-	private GameObtainer gameObt;
 
 	private LoginClient client;
-	private Game currentGame;
+	private Game game;
 	private Player player;
 
 	// UI Elements
@@ -71,6 +64,7 @@ public class MainWindow implements Runnable, ActionListener {
 	private JTextField gameInput;
 	private JLabel gameInputFeedback;
 	private JLabel gameInputInstructions;
+	private JButton btnGameSubmit;
 
 	private JLabel[] gameCardLabels;
 	private ImageIcon[] gameCardImages;
@@ -85,15 +79,10 @@ public class MainWindow implements Runnable, ActionListener {
 	public MainWindow(LoginClient clientPass, Player playerPass) {
 		player = playerPass;
 		client = clientPass;
-		gameObt = client.gameObt;
-
 	}
 
 	public void run() {
 		rand = new Random();
-
-		manager = new ScriptEngineManager();
-		engine = manager.getEngineByName("js");
 
 		main = new JFrame("The Game");
 		main.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -183,101 +172,12 @@ public class MainWindow implements Runnable, ActionListener {
 		return finalImg;
 	}
 
-	// Check if this card is actually in play
-	public boolean isCardValid(String value) {
-		// Convert JQK to int input
-		if (value.equals("J"))
-			value = "11";
-		else if (value.equals("Q"))
-			value = "12";
-		else if (value.equals("K"))
-			value = "13";
-
-		int parsed;
-		try {
-			parsed = Integer.parseInt(value);
-
-			// Check against all cards, if any match, then we're all G
-			for (int i = 0; i < 4; i++) {
-				if (parsed == currentGame.GetCards()[i]) {
-					return true;
-				}
-			}
-		} catch (Exception e) {
-			System.out.println(e.getStackTrace());
-		}
-		return false;
-
-	}
-
-	public String parseGameInput(String input) {
-		input = input.trim();
-		input = input.toUpperCase();
-
-		// Split apart all the elements that were used
-		String[] operands = input.split("[-+*/^()]");
-		System.out.println("parts len: " + operands.length);
-		for (int i = 0; i < operands.length; i++) {
-
-			// This can happen with double parens, for example
-			// So, if we're actually ealing with a used value
-			if (!operands[i].equals("") && operands[i] != null) {
-
-				// if the value is not in the game
-				if (!isCardValid(operands[i])) {
-					return "Card: [" + operands[i] + "] is not in play!";
-				}
-			}
-			System.out.println("PART: " + operands[i]);
-		}
-
-		// At this point, we are happy that the values used are actually available in
-		// this game
-		char[] inChar = input.toCharArray();
-
-		// Convert to string array
-		String[] inputArr = new String[input.length()];
-		for (int i = 0; i < input.length(); i++) {
-			inputArr[i] = Character.toString(inChar[i]);
-
-			System.out.println(inputArr[i]);
-
-			// Convert JQKA to int input
-			if (inputArr[i].equals("J"))
-				inputArr[i] = "11";
-			else if (inputArr[i].equals("Q"))
-				inputArr[i] = "12";
-			else if (inputArr[i].equals("K"))
-				inputArr[i] = "13";
-			else if (inputArr[i].equals("A"))
-				inputArr[i] = "1";
-
-		}
-		// And now we have a string which equals the user input with the letters
-		// replaced
-		input = String.join("", inputArr);
-
-		Object result;
-		try {
-			result = engine.eval(input);
-		} catch (ScriptException e) {
-			// TODO Auto-generated catch block
-			// e.printStackTrace();
-			result = "Failed to parse, try using parentheses.";
-		}
-
-		if (result == null) {
-			return "Enter your answer! (use j, q, and k for face cards)";
-		}
-		return "= " + result;
-	}
-
 	public void beginGame() {
 		// Disable newgame button
 		btnNewGame.setVisible(false);
 
 		// get a game object from the server
-		currentGame = getGame();
+		game = getGame();
 
 		// Set up game UI elements
 		gameCardLabels = new JLabel[4];
@@ -299,6 +199,7 @@ public class MainWindow implements Runnable, ActionListener {
 		gameExit.addActionListener(this);
 		gameInput = new JTextField(20);
 		gameInput.setName("Game Input");
+		btnGameSubmit = new JButton("Submit Answer");
 
 		// Limit the label size to avoid dogey resizing when the text feedback changes
 		Dimension d = new Dimension(300, 20);
@@ -317,7 +218,7 @@ public class MainWindow implements Runnable, ActionListener {
 			gameCardLabels[i].setBackground(new Color(255, 255, 255));
 			gamePanel.add(gameCardLabels[i]);
 
-			String filename = currentGame.GetFileNameFromCardNumber(currentGame.GetCards()[i]);
+			String filename = game.getFileNameFromCardNumber(game.getCards()[i]);
 			gameCardImages[i] = resizeImage(filename, lblSize.width, lblSize.height);
 			gameCardLabels[i].setIcon(gameCardImages[i]);
 
@@ -332,6 +233,7 @@ public class MainWindow implements Runnable, ActionListener {
 		gamePanelInput.add(gameInputInstructions);
 		gamePanelInput.add(gameInput);
 		gamePanelInput.add(gameInputFeedback);
+		gamePanelInput.add(btnGameSubmit);
 		gamePanelOptions.add(gameExit);
 		panel2Game.add(gamePanelOptions);
 		panel2Game.add(gamePanel);
@@ -341,14 +243,15 @@ public class MainWindow implements Runnable, ActionListener {
 		gamePanelInput.setVisible(true);
 		gameInputFeedback.setOpaque(true);
 		gameInputFeedback.setVisible(true);
-
+		
+		btnGameSubmit.addActionListener(this);
+		
 		// TODO: Fix the alignment of the label
 		gameInput.addKeyListener(new KeyAdapter() {
 			public void keyReleased(KeyEvent e) {
 				JTextField textField = (JTextField) e.getSource();
 				String text = textField.getText();
-				System.out.println(text);
-				gameInputFeedback.setText(parseGameInput(text));
+				gameInputFeedback.setText(game.calculateGameInput(text));
 			}
 		});
 	}
@@ -363,7 +266,7 @@ public class MainWindow implements Runnable, ActionListener {
 		panel2Game.remove(gamePanel);
 		panel2Game.repaint();
 
-		currentGame = null;
+		game = null;
 
 		// TODO: Notify server?
 
@@ -371,8 +274,13 @@ public class MainWindow implements Runnable, ActionListener {
 	}
 
 	public Game getGame() {
+		// TESTING
+		//return client.dbConn.getTestGame();
+
 		try {
-			Game serverResponse = gameObt.GetGame(player);
+			
+			Game serverResponse = client.jmsClient.getGame(player);
+			
 			return serverResponse;
 		} catch (JMSException | InterruptedException e) {
 			// TODO Auto-generated catch block
@@ -380,21 +288,40 @@ public class MainWindow implements Runnable, ActionListener {
 		}
 		return null;
 	}
+	
+	public void awaitResult() {
+		// TODO: Store this globally for use in UI
+		// TODO: first evoke a local UI method to show "waiting for other player's results"
+		GameResult gR = client.jmsClient.awaitResult(player, game);
+	}
 
 	@Override
 	public void actionPerformed(ActionEvent arg0) {
 		if (arg0.getActionCommand() == "Log Out") {
 			client.logoutAndReset();
 		} else if (arg0.getActionCommand() == "New Game") {
-			currentGame = getGame();
-
-			if (currentGame != null) {
+			
+			game = getGame();
+			if (game != null) {
 				beginGame();
 			} else {
 				// TODO: "sorry try again" message
 			}
 		} else if (arg0.getActionCommand() == "Quit Game") {
+			
 			quitGame();
-		}
+		} else if (arg0.getActionCommand() == "Submit Answer") {
+			
+			String answer = gameInputFeedback.getText();
+			try {
+				client.jmsClient.submitGameAnswer(player, game, answer);
+				System.out.println("Answer Submitted.");
+				awaitResult();
+				
+			} catch (JMSException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}		
 	}
 }

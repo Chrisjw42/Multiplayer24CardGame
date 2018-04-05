@@ -17,27 +17,32 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import com.sun.messaging.jmq.jmsclient.TextMessageImpl;
 
-public class GameObtainer {
+public class JmsClient {
 
 	private String host;
 	private Context jndiContext;
 	private ConnectionFactory connectionFactory;
+	private Connection conn;
+	private Session sess;
+	private LinkedList<String> localActiveGames;
+
 	private Queue playerQueue;
 	private Queue gameQueue;
 	private Queue activeGameQueue;
-	private Connection conn;
-	private Session sess;
+	private Queue gameInputQueue;
+	private Queue gameResultQueue;
 	private MessageProducer playerQueueSender;
+	private MessageProducer gameInputSender;
 	private MessageConsumer queueReceiver;
-	private LinkedList<String> localActiveGames;
-	public Game game;
 
-	public GameObtainer(String host) { // TODO: consider passing Player object reference
+	public Game game;
+	
+	public JmsClient(String host) { // TODO: consider passing Player object reference
 		this.host = host;
 		localActiveGames = new LinkedList<String>();
 	}
 
-	public boolean Initialise() {
+	public boolean initialise() {
 		// Access JNDI
 		try {
 			game = null;
@@ -62,15 +67,44 @@ public class GameObtainer {
 	 * Append a playerID to the game list
 	 */
 	public void enqueuePlayer(Player player) throws JMSException {
-		createSender();
+		createPlayerQueueSender();
 		TextMessage msg = sess.createTextMessage();
 		msg.setText(player.name + "," + player.id);
 		playerQueueSender.send(msg);
 		// send non-text control message to end
 		// playerQueueSender.send(sess.createMessage());
 	}
+	
+	/*
+	 * Append a playerID to the game list
+	 */
+	public void submitGameAnswer(Player p, Game g, String answer) throws JMSException {
+		
+		// Make sure player is in game. 
+		Player[] plys = g.getPlayers();
+		boolean fraud = true;
+		for (int i = 0; i < 4; i++) {
+			if (plys[i].id.equals(p.id)) {
+				fraud = false;
+			}
+		}
+		if (fraud == true) {
+			System.err.println("Error, trying to submit answer for game you are not partaking in.");
+			return;
+		}
+		
+		// good to go
+		createGameInputSender();
+		
+		TextMessage msg = sess.createTextMessage();
+		msg.setText(p.id + ", " + g.getId() + ", " + answer);
+		System.out.println("uploading gameAnswer: " + msg.getText());
+		gameInputSender.send(msg);
+		// send non-text control message to end
+		// playerQueueSender.send(sess.createMessage());
+	}
 
-	public Game DecodeGameMessage(String gameMessage) {
+	public Game decodeGameMessage(String gameMessage) {
 		System.out.println("Decoding: " + gameMessage);
 		String thisGame = gameMessage;
 		// Decode the message
@@ -91,18 +125,20 @@ public class GameObtainer {
 		}
 
 		Game g = new Game(players[0]);
-		g.SetId(gameId);
-		g.SetCards(cards);
+		g.setId(gameId);
+		g.setCards(cards);
 
 		// j = 1, because the first player was already passed
 		for (int j = 1; j < playerRaw.length; j++) {
-			g.SetPlayer(j, players[j]);
+			g.setPlayer(j, players[j]);
 		}
 
 		return g;
 	}
 
-	public Game FindActiveGameWithPlayer(Player player) throws JMSException {
+	public Game findActiveGameWithPlayer(Player player) throws JMSException {
+		
+		// TODO: utilise the general method "observerqueue" here
 		// Read queue without consuming messages
 		QueueBrowser queueBrowser = sess.createBrowser(activeGameQueue);
 		Enumeration msgs = queueBrowser.getEnumeration();
@@ -120,13 +156,13 @@ public class GameObtainer {
 
 			System.out.println(thisGame);
 
-			Game g = DecodeGameMessage(thisGame);
+			Game g = decodeGameMessage(thisGame);
 
 			// For this game, we check if any of the players match the player we are
 			// searching for
 			for (int i = 0; i < 4; i++) {
-				System.out.println(g.GetPlayers()[i].id);
-				if (g.GetPlayers()[i].id.equals(player.id)) {
+				System.out.println(g.getPlayers()[i].id);
+				if (g.getPlayers()[i].id.equals(player.id)) {
 					// ding ding!
 					System.out.println("Player: " + player.id + " has found their game, and "
 							+ "it is active, and ready to be played.");
@@ -141,7 +177,7 @@ public class GameObtainer {
 	/*
 	 * Get a game
 	 */
-	public Game GetGame(Player player) throws JMSException, InterruptedException {
+	public Game getGame(Player player) throws JMSException, InterruptedException {
 
 		if (game == null) {
 			// Add player to the list of seeking players
@@ -150,7 +186,7 @@ public class GameObtainer {
 
 			// Every 1 second, try and read available game list
 			while (game == null) {
-				game = FindActiveGameWithPlayer(player);
+				game = findActiveGameWithPlayer(player);
 				TimeUnit.SECONDS.sleep(1);
 			}
 		}
@@ -185,7 +221,9 @@ public class GameObtainer {
 		try {
 			playerQueue = (Queue) jndiContext.lookup("jms/PlayerQueue");
 			gameQueue = (Queue) jndiContext.lookup("jms/GameQueue");
+			gameInputQueue = (Queue) jndiContext.lookup("jms/GameInputQueue");
 			activeGameQueue = (Queue) jndiContext.lookup("jms/ActiveGameQueue");
+			gameResultQueue = (Queue) jndiContext.lookup("jms/GameResultQueue");
 		} catch (NamingException e) {
 			System.err.println("JNDI API JMS queue lookup failed: " + e);
 			throw e;
@@ -211,6 +249,71 @@ public class GameObtainer {
 				break;
 			}
 		}
+	}
+	
+	public GameResult awaitResult(Player player, Game game) {
+		while(true) {
+			System.out.println("Awaiting result...");
+			try {
+				TimeUnit.SECONDS.sleep(2000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			LinkedList<String> gameResultMsgs = null;
+			try {
+				gameResultMsgs = observeMessages(gameResultQueue);
+			} catch (JMSException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+			// Check every result string
+			for (int i = 0; i < gameResultMsgs.size(); i++) {
+				String[] components = gameResultMsgs.get(i).split(",");
+				System.out.println("JmsClient observing result: "+components[0]);
+				// If the posted result matches this game
+				if (components[0].equals(game.getId())) {
+					
+					// Add the winners from the message to the GameResult
+					GameResult gR = new GameResult(game);
+					String[] winners = components[1].split("^");
+					for(int j = 0; j < winners.length; j++) {
+						gR.addWinner(winners[j]);
+					}
+					
+					// Only happens once a matching result has been found
+					return gR;
+				}
+			}
+		}
+	}
+	
+	
+	/*
+	 * Read queue messages WITHOUT consuming them. 
+	 */
+	public LinkedList<String> observeMessages(Queue relevantQueue) throws JMSException {
+		// Read queue without consuming messages
+		QueueBrowser queueBrowser = sess.createBrowser(relevantQueue);
+		Enumeration msgs = queueBrowser.getEnumeration();
+
+		LinkedList<String> msgsReturn = new LinkedList<String>();
+		
+		// Get every game in the list
+		while (msgs.hasMoreElements()) {
+			String thisMsg;
+			try {
+				thisMsg = ((TextMessageImpl) msgs.nextElement()).getText();
+				msgsReturn.add(thisMsg);
+			} catch (ClassCastException e) {
+				System.err.println("Tried to parse a message that was not text-based.");
+				thisMsg = null;
+				continue; // Skip this iteration
+			}
+		}
+		return msgsReturn;
 	}
 
 	private void createReceiver(Queue relevantQueue) throws JMSException {
@@ -242,7 +345,7 @@ public class GameObtainer {
 	}
 
 	// Was: QueueSender
-	private void createSender() throws JMSException {
+	private void createPlayerQueueSender() throws JMSException {
 		try {
 			playerQueueSender = sess.createProducer(playerQueue);
 		} catch (JMSException e) {
@@ -251,6 +354,17 @@ public class GameObtainer {
 		}
 	}
 
+	// Was: QueueSender
+	private void createGameInputSender() throws JMSException {
+		try {
+			gameInputSender = sess.createProducer(gameInputQueue);
+		} catch (JMSException e) {
+			System.err.println("Failed to create session: " + e);
+			throw e;
+		}
+	}
+
+	
 	public void close() {
 		if (conn != null) {
 			try {

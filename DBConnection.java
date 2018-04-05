@@ -33,13 +33,19 @@ public class DBConnection {
 		rng = new Random();
 	}
 	
+	public Game getTestGame() {
+		Game thisGame = new Game(new Player("q", "123"));
+		thisGame.addPlayer(new Player("w", "234"));
+		thisGame.setCards(new String[]{"10","11","6","3"});
+		thisGame.initialiseId(getValidId("game"));
+	
+		return thisGame;
+	}
+	
 	private void TestDBAddGame() {
 		//Testing
-		Game thisGame = new Game(new Player("q", "123"));
-		thisGame.AddPlayer(new Player("w", "234"));
-		thisGame.SetCards(new String[]{"10","11","6","3"});
-		thisGame.InitialiseId(getValidId("game"));
-		addGameToDB(thisGame);
+		
+		addGameToDB(getTestGame());
 	}
 
 	private LinkedList<String[]> listPlayers() {
@@ -103,13 +109,13 @@ public class DBConnection {
 			// Question marks are used for passing parameters
 			PreparedStatement stmt = conn
 					.prepareStatement("INSERT INTO game (gameId, cards, player1) VALUES (?, ?, ?)");
-			stmt.setString(1, game.GetId());
-			stmt.setString(2, game.GetCardsString("^"));
-			stmt.setString(3, game.GetPlayers()[0].id);
+			stmt.setString(1, game.getId());
+			stmt.setString(2, game.getCardsString("^"));
+			stmt.setString(3, game.getPlayers()[0].id);
 			stmt.execute();
 			
 			// Now we add the individual players
-			int nPlayers = game.GetNumberOfPlayers();
+			int nPlayers = game.getNumberOfPlayers();
 			
 			// Start from i=1 (player 2)
 			for (int i = 1; i < nPlayers; i++) {
@@ -118,18 +124,18 @@ public class DBConnection {
 				// Sorry for this structure, can't pass the right kind of string programatically
 				if (n == 2) {
 					stmt = conn.prepareStatement("UPDATE game SET player2 = ? WHERE gameId = ?");
-					stmt.setInt(1, Integer.parseInt(game.GetPlayers()[i].id));
-					stmt.setInt(2, Integer.parseInt(game.GetId()));					
+					stmt.setInt(1, Integer.parseInt(game.getPlayers()[i].id));
+					stmt.setInt(2, Integer.parseInt(game.getId()));					
 				}
 				else if (n == 3){
 					stmt = conn.prepareStatement("UPDATE game SET player3 = ? WHERE gameId = ?");
-					stmt.setInt(1, Integer.parseInt(game.GetPlayers()[i].id));
-					stmt.setInt(2, Integer.parseInt(game.GetId()));					
+					stmt.setInt(1, Integer.parseInt(game.getPlayers()[i].id));
+					stmt.setInt(2, Integer.parseInt(game.getId()));					
 				}
 				else if (n == 4) {
 					stmt = conn.prepareStatement("UPDATE game SET player4 = ? WHERE gameId = ?");
-					stmt.setInt(1, Integer.parseInt(game.GetPlayers()[i].id));
-					stmt.setInt(2, Integer.parseInt(game.GetId()));					
+					stmt.setInt(1, Integer.parseInt(game.getPlayers()[i].id));
+					stmt.setInt(2, Integer.parseInt(game.getId()));					
 				}
 				int rows = stmt.executeUpdate();
 			}

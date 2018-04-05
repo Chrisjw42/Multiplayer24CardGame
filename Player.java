@@ -7,5 +7,8 @@ public class Player {
 		this.name = name;
 		this.id = playerId;
 	}
-
+	
+	public String getId() {
+		return id;
+	}
 }

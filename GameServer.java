@@ -1,4 +1,5 @@
 import java.sql.SQLException;
+import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
@@ -9,29 +10,39 @@ import javax.jms.Message;
 import javax.jms.MessageConsumer;
 import javax.jms.MessageProducer;
 import javax.jms.Queue;
+import javax.jms.QueueBrowser;
 import javax.jms.Session;
 import javax.jms.TextMessage;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
+import com.sun.messaging.jmq.jmsclient.TextMessageImpl;
+
 public class GameServer {
 
 	private String host;
 	private Context jndiContext;
 	private ConnectionFactory connectionFactory;
-	private Queue playerQueue;
-	private Queue activeGameQueue;
-	private LinkedList<String> localPlayerQueue;
-	private LinkedList<PotentialGame> localPotentialGames;
-	private LinkedList<Game> localActiveGames;
 	private Connection conn;
 	private Session sess;
+	private LinkedList<String> localPlayerQueue;
+	private LinkedList<PotentialGame> localPotentialGames;
+	private LinkedList<String> localGameInputs;
+	private LinkedList<Game> localActiveGames;
+	
+	private Queue playerQueue;
+	private Queue activeGameQueue;
+	private Queue gameInputQueue;
+	private Queue gameResultQueue;
+
 	private MessageProducer activeGameQueueSender;
+	private MessageProducer gameResultQueueSender;
+	
+	private MessageConsumer queueReceiver;
 	
 	private DBConnection dbConn;
-	// shutdown thread
-
+	
 	public static void main(String[] args) {
 		String host = "localhost";
 		GameServer gameServer = null;
@@ -73,6 +84,9 @@ public class GameServer {
 		localPlayerQueue = new LinkedList<String>();
 		localPotentialGames = new LinkedList<PotentialGame>();
 		localActiveGames = new LinkedList<Game>();
+		localGameInputs = new LinkedList<String>();
+		
+		queueReceiver = null;
 
 		// Access JNDI
 		createJNDIContext();
@@ -81,103 +95,13 @@ public class GameServer {
 		lookupConnectionFactory();
 		lookupQueues();
 		
-		// Clear queues on startup (fight me)
-		if (playerQueue != null) {
-			killMessages(playerQueue);
-		}
-		if (activeGameQueue != null) {
-			killMessages(activeGameQueue);
-		}
 
 		// Create connection->session->sender
 		createConnection();
 		createSession();
-		createSender();
-	}
+		createActiveGameQueueSender();
 
-	private void createSender() throws JMSException {
-		try {
-			activeGameQueueSender = sess.createProducer(activeGameQueue);
-		} catch (JMSException e) {
-			System.err.println("Failed to create session: " + e);
-			throw e;
-		}
-	}
-	
-	public Game DecodeGameMessage(String gameMessage) {
-		System.out.println("Decoding: " + gameMessage);
-		String thisGame = gameMessage;
-		// Decode the message
-		String[] values = thisGame.split(",");
-		String gameId = values[0];
-		String[] playerRaw = values[1].split("&");
-		String[] cards = values[2].split("&");
-
-		// Each row is a player, each of the two cells are id and name respectively.
-		String[][] playerInfo = new String[playerRaw.length][2];
-		Player[] players = new Player[playerRaw.length];
-
-		// Input format is "id-name"
-		for (int i = 0; i < playerRaw.length; i++) {
-			playerInfo[i] = playerRaw[i].split("-");
-			players[i] = new Player(playerInfo[i][1], playerInfo[i][0]);
-			System.out.println("Player in this game: " + playerInfo[i][1].toString());
-		}
-
-		Game g = new Game(players[0]);
-		g.SetId(gameId);
-		g.SetCards(cards);
-
-		// j = 1, because the first player was already passed
-		for (int j = 1; j < playerRaw.length; j++) {
-			g.SetPlayer(j, players[j]);
-		}
-
-		return g;
-	}
-
-	private void ActivateGame(PotentialGame pg, int indexInLocalList) throws JMSException {
-		String gameId = dbConn.getValidId("game");
-		String players = pg.game.GetPlayersString("&");
-		String cards = pg.game.GetCardsString("&");
-		// Ensure the game has a unique Id
-		pg.game.InitialiseId(gameId);
-
-		dbConn.addGameToDB(pg.game);
-		
-
-		TextMessage msg = sess.createTextMessage();
-
-		// csv the values
-		msg.setText(gameId + "," + players + "," + cards);
-		activeGameQueueSender.send(msg);
-		
-		/* left commmented, becuase deactivating seems to have no efffect, but the exmaple code includes it? */
-		// send non-text control message to end
-		// activeGameQueueSender.send(sess.createMessage()); 
-
-		// Now that game is activated, we can remove it from the local potentialGame list
-		localPotentialGames.remove(indexInLocalList);
-	}
-
-	private void ActivateGamesThatAreReady() {
-		// games that have waited long enough can start
-		for (int g = 0; g < localPotentialGames.size(); g++) {
-			PotentialGame thisPg = localPotentialGames.get(g);
-
-			// If waiting longer than 10 sec, and > 1 player...
-			if (thisPg.waitingTime > 10 && thisPg.game.GetNumberOfPlayers() > 1) {
-				// Game can start!
-				System.out.println(
-						"Game {} has been waiting: " + thisPg.waitingTime + " seconds. It will now be started.");
-				try {
-					ActivateGame(thisPg, g);
-				} catch (JMSException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-			}
-		}
+		clearQueues(); // fight me
 	}
 
 	public void manageGames() throws InterruptedException {
@@ -185,7 +109,7 @@ public class GameServer {
 		while (true) {
 			System.out.println("Running Game management loop");
 
-			ActivateGamesThatAreReady();
+			activateGamesThatAreReady();
 
 			// attempt to organise current players into games in to games
 			if (localPlayerQueue.size() > 0) {
@@ -210,13 +134,13 @@ public class GameServer {
 					for (int g = 0; g < localPotentialGames.size(); g++) {
 						PotentialGame pg = localPotentialGames.get(g);
 						System.out.println("Potential games in queue: " + localPotentialGames.size());
-						if (pg.game.SpareSlot()) {
+						if (pg.game.isTherASpareSlot()) {
 							// Ding Ding! Spare slot available for this player
 							System.out.println("Game found for: " + newPlayer.id);
 							gameFound = true;
-							pg.game.AddPlayer(newPlayer);
+							pg.game.addPlayer(newPlayer);
 							//pg.ResetWaitingTime();
-							pg.game.PrintPlayers();
+							pg.game.printPlayers();
 						}
 					}
 
@@ -232,22 +156,220 @@ public class GameServer {
 			// get all waiting players, add the to the local linked list of players
 			try {
 				// System.err.println("Trying to receive playerqueue");
-				receiveMessages(playerQueue, localPlayerQueue);
+				LinkedList<String> msgs = receiveMessages(playerQueue);
+				localPlayerQueue = extend(localPlayerQueue, msgs);
 				System.out.println("Local player queue size: " + localPlayerQueue.size());
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-
-			IncrementTimers(1);
+			processGameInput();
+			incrementTimers(4); // TODO: Actually calculate the time because the JMS calls are inconsistent
 		}
 	}
+	
+	/*
+	 * Extend one linkedlist with another
+	 */
+	public LinkedList<String> extend(LinkedList<String> base, LinkedList<String> extension) {
+		for (int i = 0; i < extension.size(); i++) {
+			base.add(extension.get(i));
+		}
+		return base;
+	} 
+	
+	
+	/*
+	 * Handle all gameinput that has been received
+	 */
+	private void processGameInput() {
+		System.out.println("ProcessGameInput, " + localActiveGames.size() + " active games");
+		LinkedList<String> msgs;
+		// pull down queue
+		try {
+			msgs = receiveMessages(gameInputQueue);
+			localGameInputs = extend(localGameInputs, msgs);
+		} catch (JMSException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			return;
+		}
+		
+		// Pull all the active games, and process the list of messages
+		try {
+			updateLocalActiveGameList();
+			while (msgs.size() > 0) {
+				processGameInputMessage(msgs.pop());
+			}
+		} catch (JMSException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		// if all players have answered, calculate gameresults, add []
+		for (int i = 0; i < localActiveGames.size(); i++) {
+			Game g = localActiveGames.get(i);
+			if (g.haveAllPlayersAnswered()) {
+				// Create GameResults
+				processGameResult(new GameResult(g));
+			}
+		}		
+	}
+	
+	private void processGameResult(GameResult gR) {		
+		// to "GameResults" queue
+		try {
+			submitGameResultToQueue(gR);
+		} catch (JMSException e) {
+			// TODO Auto-generated catch block
+			
+			// Store it locally? 
+			
+			e.printStackTrace();
+		}
+		
+		// Update DB
+		
+	}
+	
+	
+	public void submitGameResultToQueue(GameResult gR) throws JMSException {
+		String[] winners = gR.getWinners();
+		Game game = gR.getGame();
 
-	private void IncrementTimers(int i) throws InterruptedException {
+		createGameResultQueueSender();
+		
+		String winnersStr = "";
+		for (int i = 0; i < 4; i ++) {
+			if(winners[i] != null)
+			{
+				winnersStr += winners[i];
+				winnersStr += "^";
+			}
+		}
+		// remove the last '^'
+		winnersStr.substring(0, winnersStr.length() - 1);
+		
+		TextMessage msg = sess.createTextMessage();
+		msg.setText(game.getId() + "," + winnersStr);
+		gameResultQueueSender.send(msg);
+		// send non-text control message to end
+		// playerQueueSender.send(sess.createMessage());
+	}
+	
+	/*
+	 *  The assumption here is that localActiveGameQueue is up to date
+	 *  message format: p.id + ", " + g.GetId() + ", " + answer
+	 */
+	private void processGameInputMessage(String msg) {
+		System.out.println("processing: "+ msg);
+		// parse message 
+		String[] components = msg.split(",");
+		Game relevantGame = null;
+		
+		for (int i = 0; i< localActiveGames.size(); i++) {
+			if (localActiveGames.get(i).getId().equals(components[1])) {
+				relevantGame = localActiveGames.get(i);				
+			}
+		}
+		// Find which slot this player sits in, and set the answer accordingly
+		for (int i = 0; i < 4; i++) {
+			if (relevantGame.getPlayers()[i].getId().equals(components[0])) {
+				relevantGame.setAnswer(i, components[2]);
+			}
+		}
+	}
+	
+	private void updateLocalActiveGameList() throws JMSException {
+		LinkedList<String> msgs = receiveMessages(activeGameQueue);
+		for (int i = 0; i < msgs.size(); i++) {
+			// Pull all the activeGames from the list, and add them to the local activeGameList
+			localActiveGames.add(decodeGameMessage(msgs.get(i)));
+		}
+	}
+	
+	
+	public Game decodeGameMessage(String gameMessage) {
+		System.out.println("Decoding: " + gameMessage);
+		String thisGame = gameMessage;
+		// Decode the message
+		String[] values = thisGame.split(",");
+		String gameId = values[0];
+		String[] playerRaw = values[1].split("&");
+		String[] cards = values[2].split("&");
+
+		// Each row is a player, each of the two cells are id and name respectively.
+		String[][] playerInfo = new String[playerRaw.length][2];
+		Player[] players = new Player[playerRaw.length];
+
+		// Input format is "id-name"
+		for (int i = 0; i < playerRaw.length; i++) {
+			playerInfo[i] = playerRaw[i].split("-");
+			players[i] = new Player(playerInfo[i][1], playerInfo[i][0]);
+			System.out.println("Player in this game: " + playerInfo[i][1].toString());
+		}
+
+		Game g = new Game(players[0]);
+		g.setId(gameId);
+		g.setCards(cards);
+
+		// j = 1, because the first player was already passed
+		for (int j = 1; j < playerRaw.length; j++) {
+			g.setPlayer(j, players[j]);
+		}
+
+		return g;
+	}
+
+	private void activateGame(PotentialGame pg, int indexInLocalList) throws JMSException {
+		String gameId = dbConn.getValidId("game");
+		String players = pg.game.getPlayersString("&");
+		String cards = pg.game.getCardsString("&");
+		// Ensure the game has a unique Id
+		pg.game.initialiseId(gameId);
+
+		dbConn.addGameToDB(pg.game);
+		
+
+		TextMessage msg = sess.createTextMessage();
+
+		// csv the values
+		msg.setText(gameId + "," + players + "," + cards);
+		activeGameQueueSender.send(msg);
+		
+		/* left commmented, becuase deactivating seems to have no efffect, but the exmaple code includes it? */
+		// send non-text control message to end
+		// activeGameQueueSender.send(sess.createMessage()); 
+
+		// Now that game is activated, we can remove it from the local potentialGame list
+		localPotentialGames.remove(indexInLocalList);
+	}
+
+	private void activateGamesThatAreReady() {
+		// games that have waited long enough can start
+		for (int g = 0; g < localPotentialGames.size(); g++) {
+			PotentialGame thisPg = localPotentialGames.get(g);
+
+			// If waiting longer than 10 sec, and > 1 player...
+			if (thisPg.waitingTime > 10 && thisPg.game.getNumberOfPlayers() > 1) {
+				// Game can start!
+				System.out.println(
+						"Game {} has been waiting: " + thisPg.waitingTime + " seconds. It will now be started.");
+				try {
+					activateGame(thisPg, g);
+				} catch (JMSException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
+	private void incrementTimers(int i) throws InterruptedException {
 		TimeUnit.SECONDS.sleep(i);
 		// Increment game waiting timers by one second
 		for (int g = 0; g < localPotentialGames.size(); g++) {
-			localPotentialGames.get(g).IncrementWaitingTime(i);
+			localPotentialGames.get(g).incrementWaitingTime(i);
 		}
 	}
 
@@ -285,6 +407,8 @@ public class GameServer {
 		try {
 			playerQueue = (Queue) jndiContext.lookup("jms/PlayerQueue");
 			activeGameQueue = (Queue) jndiContext.lookup("jms/ActiveGameQueue");
+			gameInputQueue = (Queue) jndiContext.lookup("jms/GameInputQueue");
+			gameResultQueue = (Queue) jndiContext.lookup("jms/GameResultQueue");
 		} catch (NamingException e) {
 			System.err.println("JNDI API JMS queue lookup failed: " + e);
 			throw e;
@@ -305,21 +429,50 @@ public class GameServer {
 	 * Parametrised, specify the JMS queue to pull from, as well as the local queue
 	 * to store results in
 	 */
-	public void receiveMessages(Queue relevantQueue, LinkedList<String> localQueue) throws JMSException {
+	public LinkedList<String> receiveMessages(Queue relevantQueue) throws JMSException {
 		createReceiver(relevantQueue);
+		LinkedList<String> msgsReturn = new LinkedList<String>();
+		
 		while (true) {
 			// The library is designed to hang forever on this until a message is received.
 			Message m = queueReceiver.receive(1000);// 1000 => timeout of 1 second
 			if (m != null && m instanceof TextMessage) {
 				TextMessage textMessage = (TextMessage) m;
 				System.err.println("Received message: " + textMessage.getText());
-				localQueue.add(textMessage.getText());
+				msgsReturn.add(textMessage.getText());
 
 			} else {
 				queueReceiver.close();
 				break;
 			}
 		}
+		return msgsReturn;
+	}
+	
+	/*
+	 * Read queue messages WITHOUT consuming them. 
+	 */
+	public LinkedList<String> observeMessages(Queue relevantQueue) throws JMSException {
+		// Read queue without consuming messages
+		QueueBrowser queueBrowser = sess.createBrowser(relevantQueue);
+		Enumeration msgs = queueBrowser.getEnumeration();
+
+		LinkedList<String> msgsReturn = new LinkedList<String>();
+		
+		// Get every game in the list
+		while (msgs.hasMoreElements()) {
+			String thisMsg;
+			try {
+				thisMsg = ((TextMessageImpl) msgs.nextElement()).getText();
+				msgsReturn.add(thisMsg);
+			} catch (ClassCastException e) {
+				System.err.println("Tried to parse a message that was not text-based.");
+				thisMsg = null;
+				continue; // Skip this iteration
+			}
+		}
+		
+		return msgsReturn;
 	}
 
 	public void killMessages(Queue relevantQueue) throws JMSException {
@@ -335,6 +488,25 @@ public class GameServer {
 			}
 		}
 	}
+	
+	private void createActiveGameQueueSender() throws JMSException {
+		try {
+			activeGameQueueSender = sess.createProducer(activeGameQueue);
+		} catch (JMSException e) {
+			System.err.println("Failed to create session: " + e);
+			throw e;
+		}
+	}
+	
+
+	private void createGameResultQueueSender() throws JMSException {
+		try {
+			gameResultQueueSender = sess.createProducer(gameResultQueue);
+		} catch (JMSException e) {
+			System.err.println("Failed to create session: " + e);
+			throw e;
+		}
+	}
 
 	private void createSession() throws JMSException {
 		try {
@@ -344,8 +516,6 @@ public class GameServer {
 			throw e;
 		}
 	}
-
-	private MessageConsumer queueReceiver;
 
 	private void createReceiver(Queue relevantQueue) throws JMSException {
 		try {
@@ -364,8 +534,12 @@ public class GameServer {
 			if (activeGameQueue != null) {
 				killMessages(activeGameQueue);
 			}
+			if (gameInputQueue != null) {
+				killMessages(gameInputQueue);
+			}
+			
 		} catch (JMSException e) {
-			System.err.println("Failed to kill queue messages on close");
+			System.err.println("Failed to kill queue messages");
 			e.printStackTrace();
 		}
 	}
