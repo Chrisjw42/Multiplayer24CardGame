@@ -95,6 +95,9 @@ public class Game {
 		}
 	}
 	
+	/*
+	 * Note: this is the CALCUALTED answer, not the original input.
+	 */
 	public void setAnswer(int slot, String answer) {
 		answers[slot] = answer;
 	}
@@ -130,6 +133,23 @@ public class Game {
 			if (players[i] != EmptyPlayer) {
 				// append each player Id
 				str = str + players[i].id + "-" + players[i].name + delimiter;
+			}
+		}
+
+		// if there are valid players
+		if (str != "") {
+			// Remove last character, which will be an extra delimeter
+			str = str.substring(0, str.length() - 1);
+		}
+		return str;
+	}
+	
+	public String getPlayerIdsString(String delimiter) {
+		String str = "";
+		for (int i = 0; i < 4; i++) {
+			if (players[i] != EmptyPlayer) {
+				// append each player Id
+				str = str + players[i].id + delimiter;
 			}
 		}
 
@@ -184,6 +204,9 @@ public class Game {
 			value = "12";
 		else if (value.equals("K"))
 			value = "13";
+		else if (value.equals("A"))
+			value = "1";
+		
 
 		int parsed;
 		try {
@@ -201,6 +224,19 @@ public class Game {
 		return false;
 
 	}
+	
+	/*
+	private String convertStringToInt(String inputArr) {
+		if (inputArr.equals("J"))
+			return "11";
+		else if (inputArr.equals("Q"))
+			return "12";
+		else if (inputArr.equals("K"))
+			return "13";
+		else if (inputArr.equals("A"))
+			return "1";
+		return null;
+	}*/
 	
 	public String calculateGameInput(String input) {
 		input = input.trim();
@@ -257,32 +293,58 @@ public class Game {
 		if (result == null) {
 			return "Enter your answer! (use j, q, and k for face cards)";
 		}
-		return "= " + result;
+		return ""+result;
 	}
 	
 	public String[] getWinners() {
 		calculatePlayerScores();
 		int min = 99999999;
 		String[] winners = new String[] {null,null,null,null};
-		
+		int nWinners = 0;
 		for (int i = 0; i < getNumberOfPlayers(); i++) {
 			if (scores[i] < min) {
 				min = scores[i];
 				winners[i] = players[i].getId();
+				
+				// Negate previous winners, we have a new leader
+				for (int j = 0; j < i; j++) {
+					winners[j] = null;
+				}
+				nWinners = 1;
 			}
 			// If the score is tied with the winning score
 			else if (scores[i] == min) {
 				winners[i] = players[i].getId();
+				nWinners++;
 			}
 		}
-		return winners;
+		
+		// Dont return the nulls, just an array of the actual winners
+		String[] winnersPass = new String[nWinners];
+		for (int i = 0; i < getNumberOfPlayers(); i++) {
+			if (winners[i] != null) {
+				for (int j = 0; j < nWinners; j++) {
+					if (winnersPass[j] == null) {
+						winnersPass[j] = winners[i];
+						break;
+					}
+				}
+			}
+		}
+		
+		return winnersPass;
 	}
 	
 	private void calculatePlayerScores() {
 		for (int i = 0; i < getNumberOfPlayers(); i++) {
 			// Calculate the game input, then parse as an int
-			int result = Integer.parseInt(calculateGameInput(answers[i]));
-			scores[i] = Math.abs(24 - result);
+			if (answers[i] != null) {				
+				int result = Integer.parseInt(answers[i]);
+				scores[i] = Math.abs(24 - result);
+			}
+			else {
+				scores[i] = 999999;
+			}
 		}
 	}
 }

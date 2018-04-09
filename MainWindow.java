@@ -44,10 +44,10 @@ public class MainWindow implements Runnable, ActionListener {
 
 	// UI Elements
 	JFrame main;
-	private JPanel panel1Usr;
-	private JPanel panel2Game;
-	private JPanel panel3Ldr;
-	private JPanel panel4Logout;
+	private JPanel pnl1Usr;
+	private JPanel pnl2Game;
+	private JPanel pnl3Ldr;
+	private JPanel pnl4Logout;
 	private JTabbedPane mainTabs;
 
 	// USER
@@ -57,9 +57,9 @@ public class MainWindow implements Runnable, ActionListener {
 
 	// GAME
 	private JButton btnNewGame;
-	private JPanel gamePanel;
-	private JPanel gamePanelInput;
-	private JPanel gamePanelOptions;
+	private JPanel pnlGame;
+	private JPanel pnlGameInput;
+	private JPanel pnlGameOptions;
 	private JButton gameExit;
 	private JTextField gameInput;
 	private JLabel gameInputFeedback;
@@ -74,6 +74,10 @@ public class MainWindow implements Runnable, ActionListener {
 
 	// LOGOUT
 	private JButton btnLogout;
+	
+	// GAMEOVER
+	private JPanel pnlGameOver;
+	private JLabel lblGameOverText;
 
 	// Pass the client to this window's constructor
 	public MainWindow(LoginClient clientPass, Player playerPass) {
@@ -87,61 +91,61 @@ public class MainWindow implements Runnable, ActionListener {
 		main = new JFrame("The Game");
 		main.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-		panel1Usr = new JPanel();
-		panel2Game = new JPanel();
-		panel3Ldr = new JPanel();
-		panel4Logout = new JPanel();
+		pnl1Usr = new JPanel();
+		pnl2Game = new JPanel();
+		pnl3Ldr = new JPanel();
+		pnl4Logout = new JPanel();
 
-		panel1Usr.setBorder(new EmptyBorder(20, 20, 20, 20));
-		panel2Game.setBorder(new EmptyBorder(20, 20, 20, 20));
-		panel3Ldr.setBorder(new EmptyBorder(20, 20, 20, 20));
-		panel4Logout.setBorder(new EmptyBorder(20, 20, 20, 20));
+		pnl1Usr.setBorder(new EmptyBorder(20, 20, 20, 20));
+		pnl2Game.setBorder(new EmptyBorder(20, 20, 20, 20));
+		pnl3Ldr.setBorder(new EmptyBorder(20, 20, 20, 20));
+		pnl4Logout.setBorder(new EmptyBorder(20, 20, 20, 20));
 
 		// USER
-		BoxLayout boxUsr = new BoxLayout(panel1Usr, BoxLayout.Y_AXIS);
-		panel1Usr.setLayout(boxUsr);
+		BoxLayout boxUsr = new BoxLayout(pnl1Usr, BoxLayout.Y_AXIS);
+		pnl1Usr.setLayout(boxUsr);
 		lblUserName = new JLabel("<html><h2>" + player.name + "</h2><html>");
 		lblUserStats = new JLabel(String.format("<html>Number of wins: %d<br />" + "Number of Games: %d<br />"
 				+ "Average time to win: %f seconds</html>", 10, 20, 12.5));
 		lblUserRank = new JLabel("<html><h3>Rank: #42</h3></html>");
 
-		panel1Usr.add(lblUserName);
-		panel1Usr.add(lblUserStats);
-		panel1Usr.add(lblUserRank);
+		pnl1Usr.add(lblUserName);
+		pnl1Usr.add(lblUserStats);
+		pnl1Usr.add(lblUserRank);
 
 		// GAME
-		BoxLayout boxGame = new BoxLayout(panel2Game, BoxLayout.Y_AXIS);
-		panel2Game.setLayout(boxGame);
+		BoxLayout boxGame = new BoxLayout(pnl2Game, BoxLayout.Y_AXIS);
+		pnl2Game.setLayout(boxGame);
 
 		btnNewGame = new JButton("New Game");
 		btnNewGame.addActionListener(this);
 
-		panel2Game.add(btnNewGame);
+		pnl2Game.add(btnNewGame);
 
 		// LEADERBOARD
 		GridLayout pnlLayout = new GridLayout();
-		panel3Ldr.setLayout(pnlLayout);
+		pnl3Ldr.setLayout(pnlLayout);
 		String[] colNames = { "Rank", "Player", "Games Won", "Games Played", "Avg. Winning Time" };
 		Object[][] data = { { 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 },
 				{ 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 },
 				{ 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 } };
 
 		tblLeader = new JTable(data, colNames);
-		panel3Ldr.add(tblLeader);
+		pnl3Ldr.add(tblLeader);
 
 		// LOGOUT
-		BoxLayout boxLogout = new BoxLayout(panel4Logout, BoxLayout.Y_AXIS);
-		panel4Logout.setLayout(boxLogout);
+		BoxLayout boxLogout = new BoxLayout(pnl4Logout, BoxLayout.Y_AXIS);
+		pnl4Logout.setLayout(boxLogout);
 		btnLogout = new JButton("Log Out");
 		btnLogout.addActionListener(this);
 
-		panel4Logout.add(btnLogout);
+		pnl4Logout.add(btnLogout);
 
 		mainTabs = new JTabbedPane();
-		mainTabs.addTab("User Profile", panel1Usr);
-		mainTabs.addTab("Play Game", panel2Game);
-		mainTabs.addTab("Leaderboard", panel3Ldr);
-		mainTabs.addTab("Log Out", panel4Logout);
+		mainTabs.addTab("User Profile", pnl1Usr);
+		mainTabs.addTab("Play Game", pnl2Game);
+		mainTabs.addTab("Leaderboard", pnl3Ldr);
+		mainTabs.addTab("Log Out", pnl4Logout);
 
 		main.add(mainTabs);
 
@@ -183,18 +187,18 @@ public class MainWindow implements Runnable, ActionListener {
 		gameCardLabels = new JLabel[4];
 		gameCardImages = new ImageIcon[4];
 		gameInputFeedback = new JLabel("=  ");
-		gamePanel = new JPanel();
-		gamePanelOptions = new JPanel();
-		gamePanelInput = new JPanel();
+		pnlGame = new JPanel();
+		pnlGameOptions = new JPanel();
+		pnlGameInput = new JPanel();
 		gameInputInstructions = new JLabel("Your Answer: ");
 
-		gamePanel.setPreferredSize(new Dimension(400, 400));
-		gamePanelOptions.setPreferredSize(new Dimension(400, 45));
-		gamePanelOptions.setBorder(BorderFactory.createEtchedBorder(1));
-		gamePanelOptions.setLayout(new FlowLayout(FlowLayout.RIGHT));
-		gamePanelOptions.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-		gamePanelInput.setPreferredSize(new Dimension(400, 150));
-		gamePanelInput.setBorder(BorderFactory.createEtchedBorder(1));
+		pnlGame.setPreferredSize(new Dimension(400, 400));
+		pnlGameOptions.setPreferredSize(new Dimension(400, 45));
+		pnlGameOptions.setBorder(BorderFactory.createEtchedBorder(1));
+		pnlGameOptions.setLayout(new FlowLayout(FlowLayout.RIGHT));
+		pnlGameOptions.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+		pnlGameInput.setPreferredSize(new Dimension(400, 150));
+		pnlGameInput.setBorder(BorderFactory.createEtchedBorder(1));
 		gameExit = new JButton("Quit Game");
 		gameExit.addActionListener(this);
 		gameInput = new JTextField(20);
@@ -216,7 +220,7 @@ public class MainWindow implements Runnable, ActionListener {
 			gameCardLabels[i] = new JLabel();
 			gameCardLabels[i].setPreferredSize(lblSize);
 			gameCardLabels[i].setBackground(new Color(255, 255, 255));
-			gamePanel.add(gameCardLabels[i]);
+			pnlGame.add(gameCardLabels[i]);
 
 			String filename = game.getFileNameFromCardNumber(game.getCards()[i]);
 			gameCardImages[i] = resizeImage(filename, lblSize.width, lblSize.height);
@@ -230,17 +234,17 @@ public class MainWindow implements Runnable, ActionListener {
 
 		// Adding the elements to the panels
 
-		gamePanelInput.add(gameInputInstructions);
-		gamePanelInput.add(gameInput);
-		gamePanelInput.add(gameInputFeedback);
-		gamePanelInput.add(btnGameSubmit);
-		gamePanelOptions.add(gameExit);
-		panel2Game.add(gamePanelOptions);
-		panel2Game.add(gamePanel);
-		panel2Game.add(gamePanelInput);
-		gamePanelOptions.setVisible(true);
-		gamePanel.setVisible(true);
-		gamePanelInput.setVisible(true);
+		pnlGameInput.add(gameInputInstructions);
+		pnlGameInput.add(gameInput);
+		pnlGameInput.add(gameInputFeedback);
+		pnlGameInput.add(btnGameSubmit);
+		pnlGameOptions.add(gameExit);
+		pnl2Game.add(pnlGameOptions);
+		pnl2Game.add(pnlGame);
+		pnl2Game.add(pnlGameInput);
+		pnlGameOptions.setVisible(true);
+		pnlGame.setVisible(true);
+		pnlGameInput.setVisible(true);
 		gameInputFeedback.setOpaque(true);
 		gameInputFeedback.setVisible(true);
 		
@@ -251,25 +255,26 @@ public class MainWindow implements Runnable, ActionListener {
 			public void keyReleased(KeyEvent e) {
 				JTextField textField = (JTextField) e.getSource();
 				String text = textField.getText();
-				gameInputFeedback.setText(game.calculateGameInput(text));
+				gameInputFeedback.setText("= "+game.calculateGameInput(text));
 			}
 		});
 	}
 
-	public void quitGame() {
+	public void quitGame(boolean gameOver) {
 
-		gamePanelOptions.removeAll();
-		gamePanelInput.removeAll();
-		gamePanel.removeAll();
-		panel2Game.remove(gamePanelOptions);
-		panel2Game.remove(gamePanelInput);
-		panel2Game.remove(gamePanel);
-		panel2Game.repaint();
+		pnlGameOptions.removeAll();
+		pnlGameInput.removeAll();
+		pnlGame.removeAll();
+		pnl2Game.remove(pnlGameOptions);
+		pnl2Game.remove(pnlGameInput);
+		pnl2Game.remove(pnlGame);
+		pnl2Game.repaint();
 
 		game = null;
 
-		// TODO: Notify server?
-
+		if (!gameOver) {
+			// TODO: Notify server?			
+		}
 		btnNewGame.setVisible(true);
 	}
 
@@ -289,10 +294,48 @@ public class MainWindow implements Runnable, ActionListener {
 		return null;
 	}
 	
-	public void awaitResult() {
-		// TODO: Store this globally for use in UI
+	public boolean getResult() {
+		// TODO: Store this globally for use in UI?
 		// TODO: first evoke a local UI method to show "waiting for other player's results"
 		GameResult gR = client.jmsClient.awaitResult(player, game);
+		String[] winners = gR.getWinners();
+		
+		for (int i = 0; i < winners.length; i++) {
+			
+			if (winners[i] != null) {
+				System.out.println(winners[i]);
+				if(player.getId().equals(gR.getWinners()[i])) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	
+	private void endGame(boolean didPlayerWin) {
+		// hide all game elements, set null 
+		quitGame(true);
+		client.jmsClient.game = null;
+		
+		// Display game results
+		pnlGameOver = new JPanel();
+		pnlGameOver.setBorder(new EmptyBorder(20,20,20,20));
+		BoxLayout bx = new BoxLayout(pnlGameOver, BoxLayout.Y_AXIS);
+		pnlGameOver.setLayout(bx);
+		
+		lblGameOverText = new JLabel();
+		String txt = "<html><h1>You ";
+		if (didPlayerWin)
+			txt = txt+"Won!</h1></html>";
+		else
+			txt = txt+"Lost!</h1></html>";
+		
+		lblGameOverText.setText(txt);
+		
+		// Add to panel, set visible
+		pnlGameOver.add(lblGameOverText);
+		pnlGameOver.add(btnNewGame);
+		pnl2Game.add(pnlGameOver);
 	}
 
 	@Override
@@ -300,6 +343,13 @@ public class MainWindow implements Runnable, ActionListener {
 		if (arg0.getActionCommand() == "Log Out") {
 			client.logoutAndReset();
 		} else if (arg0.getActionCommand() == "New Game") {
+			
+			// If we're looking at the gameOver results, remove those.
+			if(pnlGameOver != null) {
+				pnlGameOver.removeAll();
+				pnlGameOver = null;
+			}
+			
 			
 			game = getGame();
 			if (game != null) {
@@ -309,14 +359,17 @@ public class MainWindow implements Runnable, ActionListener {
 			}
 		} else if (arg0.getActionCommand() == "Quit Game") {
 			
-			quitGame();
+			// false as in, game is not actually over
+			quitGame(false);
 		} else if (arg0.getActionCommand() == "Submit Answer") {
 			
-			String answer = gameInputFeedback.getText();
+			String answer = gameInput.getText();
+			answer = game.calculateGameInput(answer);
 			try {
 				client.jmsClient.submitGameAnswer(player, game, answer);
 				System.out.println("Answer Submitted.");
-				awaitResult();
+				
+				endGame(getResult());
 				
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block

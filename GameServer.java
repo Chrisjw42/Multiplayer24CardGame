@@ -50,13 +50,12 @@ public class GameServer {
 		try {
 			gameServer = new GameServer(host);
 
+			/*
 			// Call this thread object when the program shuts down (cleanly)
 			ShutDownThread sdT = new ShutDownThread(gameServer);
 			Runtime.getRuntime().addShutdownHook(sdT);
-
-			// Uncomment this to clear the queues
-			// System.exit(0);
-
+*/
+			
 			// This function should run forever.
 			gameServer.manageGames();
 		} catch (NamingException | JMSException | InterruptedException e) {
@@ -164,7 +163,8 @@ public class GameServer {
 				e.printStackTrace();
 			}
 			processGameInput();
-			incrementTimers(4); // TODO: Actually calculate the time because the JMS calls are inconsistent
+			finishGamesThatAreFinished();
+			incrementTimers(12); // TODO: Actually calculate the time because the JMS calls are inconsistent
 		}
 	}
 	
@@ -204,34 +204,42 @@ public class GameServer {
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-		
-		// if all players have answered, calculate gameresults, add []
-		for (int i = 0; i < localActiveGames.size(); i++) {
-			Game g = localActiveGames.get(i);
-			if (g.haveAllPlayersAnswered()) {
-				// Create GameResults
-				processGameResult(new GameResult(g));
-			}
-		}		
+		}	
 	}
 	
-	private void processGameResult(GameResult gR) {		
+	private void finishGamesThatAreFinished() {
+		// if all players have answered, calculate gameresults, add []
+		int nGames = localActiveGames.size();
+		if(nGames == 0)
+			return;
+		
+		System.out.println("Local Active Games: "+nGames);
+		for (int i = 0; i < nGames; i++) {
+			Game g = localActiveGames.get(i);
+			if (g.haveAllPlayersAnswered()) {
+				System.out.println("All player have answered in a game, finishing.");
+				// Create GameResults
+				processGameResult(new GameResult(g, g.getWinners()));
+				
+				// Remove this game from the localActiveGame queue, break the loop to avoid weird indexing
+				localActiveGames.remove(i);
+				return;
+			}
+		}	
+	}
+	
+	private void processGameResult(GameResult gR) {	
 		// to "GameResults" queue
 		try {
 			submitGameResultToQueue(gR);
 		} catch (JMSException e) {
-			// TODO Auto-generated catch block
-			
-			// Store it locally? 
-			
+			// TODO Auto-generated catch block			
 			e.printStackTrace();
 		}
 		
 		// Update DB
-		
+		dbConn.addGameResultToDb(gR);
 	}
-	
 	
 	public void submitGameResultToQueue(GameResult gR) throws JMSException {
 		String[] winners = gR.getWinners();
@@ -240,18 +248,19 @@ public class GameServer {
 		createGameResultQueueSender();
 		
 		String winnersStr = "";
-		for (int i = 0; i < 4; i ++) {
+		for (int i = 0; i < winners.length; i ++) {
 			if(winners[i] != null)
 			{
 				winnersStr += winners[i];
-				winnersStr += "^";
+				winnersStr += "&";
 			}
 		}
-		// remove the last '^'
-		winnersStr.substring(0, winnersStr.length() - 1);
+		// remove the last 'char'
+		winnersStr = winnersStr.substring(0, winnersStr.length() - 1);
 		
 		TextMessage msg = sess.createTextMessage();
 		msg.setText(game.getId() + "," + winnersStr);
+		System.out.println("Submitting GameResult: "+msg.getText());
 		gameResultQueueSender.send(msg);
 		// send non-text control message to end
 		// playerQueueSender.send(sess.createMessage());
@@ -366,7 +375,7 @@ public class GameServer {
 	}
 	
 	private void incrementTimers(int i) throws InterruptedException {
-		TimeUnit.SECONDS.sleep(i);
+		//TimeUnit.SECONDS.sleep(i);
 		// Increment game waiting timers by one second
 		for (int g = 0; g < localPotentialGames.size(); g++) {
 			localPotentialGames.get(g).incrementWaitingTime(i);
@@ -537,6 +546,8 @@ public class GameServer {
 			if (gameInputQueue != null) {
 				killMessages(gameInputQueue);
 			}
+			if (gameResultQueue != null)
+				killMessages(gameResultQueue);
 			
 		} catch (JMSException e) {
 			System.err.println("Failed to kill queue messages");

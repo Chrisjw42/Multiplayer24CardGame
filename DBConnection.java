@@ -4,8 +4,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-//import java.util.Scanner;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.Map;
 import java.util.Random;
 
 public class DBConnection {
@@ -15,6 +16,9 @@ public class DBConnection {
 	private static final String DB_NAME = "c0402";
 	private Connection conn;
 	private Random rng;
+	
+	// mapping id: [name, nPlayed, nWon]
+	public Map<String, int[]> playerStats;
 
 	public static void main(String[] args) {
 		try {
@@ -31,7 +35,88 @@ public class DBConnection {
 				.getConnection("jdbc:mysql://" + DB_HOST + "/" + DB_NAME + "?user=" + DB_USER + "&password=" + DB_PASS);
 		System.out.println("DB Connected successfully");
 		rng = new Random();
+		buildPlayerStats();
 	}
+	
+	public void addGameResultToDb(GameResult gR) {
+		try {
+			
+			PreparedStatement stmt = conn.prepareStatement(
+					"INSERT INTO gameresult (gameResultId, gameId, winners, players) VALUES (?, ?, ?, ?)");
+			
+			stmt.setString(1, getValidId("gameresult"));
+			stmt.setString(2, gR.getGame().getId());
+			stmt.setString(3, gR.getWinnersString());
+			stmt.setString(4, gR.getGame().getPlayerIdsString(","));
+			stmt.execute();
+			
+		}catch(SQLException | IllegalArgumentException e) {
+			System.err.println("Error inserting record: " + e);
+		}
+	}
+	
+	private void buildPlayerStats() {
+		// list gameresults table
+		LinkedList<String[]> results = getAllGameResults();
+		
+		playerStats = new HashMap<String, int[]>();
+		
+		for (int i = 0; i < results.size(); i++) {
+			String[] res = results.get(i);
+			String[] players = res[3].split(",");
+			String[] winners = res[2].split(",");
+			
+			// If the players are already in the table, increment
+			// Otherwise, insert a base entry
+			for (int p = 0; p < players.length; p++) {
+				if (playerStats.get(players[p]) == null) {
+					int[] base = new int[] {1,0};
+					playerStats.put(players[p], base); // 1 game, 0 wins
+				}
+				else {
+					// Increment played games
+					playerStats.get(players[p])[0]++;
+				}
+			}
+			
+			// We know the players already exist now, we can simply increment
+			for (int w = 0; w < winners.length; w++) {
+				playerStats.get(winners[w])[1]++;
+			}
+		}
+		
+		// TODO: CONTINUE - playerStats are pulled down, now need to
+		// calculate playerStats and display.
+		System.out.println(playerStats.toString());
+		
+	}
+	
+	private LinkedList<String[]> getAllGameResults() {
+		
+		LinkedList<String[]> gameResults = new LinkedList<String[]>();
+		try {
+			PreparedStatement stmt = conn
+					.prepareStatement("SELECT * FROM GameResult");
+
+			ResultSet rs = stmt.executeQuery();
+			while (rs.next()) {
+				String[] res = new String[4];
+				
+				// columns are numbered from 1
+				res[0] = Integer.toString(rs.getInt(1));
+				res[1] = Integer.toString(rs.getInt(2));
+				res[2] = rs.getString(3);
+				res[3] = rs.getString(4);
+				gameResults.add(res);
+				
+			}
+		} catch (SQLException e) {
+			System.out.println("Failed to complete SQL statement: " + e);
+		}
+		
+		return gameResults;
+	}
+	
 	
 	public Game getTestGame() {
 		Game thisGame = new Game(new Player("q", "123"));

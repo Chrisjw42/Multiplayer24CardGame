@@ -97,7 +97,7 @@ public class JmsClient {
 		createGameInputSender();
 		
 		TextMessage msg = sess.createTextMessage();
-		msg.setText(p.id + ", " + g.getId() + ", " + answer);
+		msg.setText(p.id + "," + g.getId() + "," + answer);
 		System.out.println("uploading gameAnswer: " + msg.getText());
 		gameInputSender.send(msg);
 		// send non-text control message to end
@@ -255,12 +255,12 @@ public class JmsClient {
 		while(true) {
 			System.out.println("Awaiting result...");
 			try {
-				TimeUnit.SECONDS.sleep(2000);
+				TimeUnit.SECONDS.sleep(1);
 			} catch (InterruptedException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			
+
 			LinkedList<String> gameResultMsgs = null;
 			try {
 				gameResultMsgs = observeMessages(gameResultQueue);
@@ -268,20 +268,22 @@ public class JmsClient {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-			
+
 			// Check every result string
 			for (int i = 0; i < gameResultMsgs.size(); i++) {
+				System.out.println("Observed GameResult: "+gameResultMsgs.get(i));
 				String[] components = gameResultMsgs.get(i).split(",");
-				System.out.println("JmsClient observing result: "+components[0]);
 				// If the posted result matches this game
 				if (components[0].equals(game.getId())) {
 					
 					// Add the winners from the message to the GameResult
-					GameResult gR = new GameResult(game);
-					String[] winners = components[1].split("^");
+					String[] winners = components[1].split("&");
+					GameResult gR = new GameResult(game, winners);
+					
+					/*
 					for(int j = 0; j < winners.length; j++) {
 						gR.addWinner(winners[j]);
-					}
+					}*/
 					
 					// Only happens once a matching result has been found
 					return gR;
