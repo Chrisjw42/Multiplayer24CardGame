@@ -18,7 +18,7 @@ public class DBConnection {
 	private Random rng;
 	
 	// mapping id: [name, nPlayed, nWon]
-	public Map<String, int[]> playerStats;
+	private Map<String, int[]> playerStats;
 
 	public static void main(String[] args) {
 		try {
@@ -36,6 +36,15 @@ public class DBConnection {
 		System.out.println("DB Connected successfully");
 		rng = new Random();
 		buildPlayerStats();
+		testPrintPlayerStats();
+	}
+	
+	private void testPrintPlayerStats() {
+		PlayerStats[] pStats = getRankedPlayerStats();
+		
+		for (int i = 0; i < pStats.length; i++) {
+			System.err.println(pStats[i]);
+		}
 	}
 	
 	public void addGameResultToDb(GameResult gR) {
@@ -53,6 +62,107 @@ public class DBConnection {
 		}catch(SQLException | IllegalArgumentException e) {
 			System.err.println("Error inserting record: " + e);
 		}
+	}
+	
+	public PlayerStats[] getRankedPlayerStats() {
+		buildPlayerStats();
+		LinkedList<String[]> dbPlayers = listPlayers();
+		int n = dbPlayers.size();
+		
+		PlayerStats[] stats = new PlayerStats[n];
+
+		int i = 0;
+		for ( String key : playerStats.keySet() ) {
+		    int[] thisPlayer = playerStats.get(key);
+
+			PlayerStats pS = new PlayerStats();
+			pS.id = key;
+			pS.nGames = thisPlayer[0];
+			pS.nWins = thisPlayer[1];
+			pS.winPercentage = (float)pS.nWins /(float)pS.nGames;
+			
+			for (int j = 0; j<dbPlayers.size(); j++) {
+				if (dbPlayers.get(j)[0].equals(key)) {
+					pS.name = dbPlayers.get(j)[1];
+					break; // found the player's name
+				}
+			}
+			
+			stats[i] = pS;
+		
+			// TODO: TEST THIS BAD BOY
+			
+			i++;
+		}
+		stats = rankPlayerStats(stats);
+		return stats;
+	}
+	
+	public int[] getPlayerStats(String playerId) {
+		if (playerStats == null) {
+			buildPlayerStats();
+		}
+		
+		// [nGames, nWins], may be null if player has not played
+		int[] pStats = playerStats.get(playerId);
+		
+		return pStats;
+	}
+	
+	/* 
+	 * This is horrible and I am sorry
+	 */
+	private PlayerStats[] rankPlayerStats(PlayerStats[] playerStats) {
+		int nPlayers = playerStats.length;
+		
+		LinkedList<Integer> indicies = new LinkedList<Integer>();
+		
+		String[] in = new String[nPlayers];
+		
+		
+		// Get every ranked position in order
+		for (int i = 0; i < nPlayers; i++) {
+			
+			float best = 0f;
+			int index = -1;
+			String id = "";
+			for (int j = 0; j < nPlayers; j++) {
+				// find best score not already in array
+
+				// if this score is better, and not already ranked
+				if (playerStats[j] != null && playerStats[j].winPercentage > best && !isAlreadyIn(in, playerStats[j].id))
+				{
+					best = playerStats[j].winPercentage;
+					index = j;
+					id = playerStats[j].id;
+				}					
+			}
+			
+			if (index != -1){
+				indicies.add(index);
+				in[i] = id;
+				System.err.println("Rank "+i+" is: "+id);
+			}			
+		}	
+		
+		// What we have now is a ranked list that may be smaller that the nPlayers array because
+		// some null entries come from getplayers
+		
+		PlayerStats[] ranked = new PlayerStats[indicies.size()];
+		for (int i = 0; i < indicies.size(); i++) {
+			ranked[i] = playerStats[indicies.get(i)];
+		}
+		
+		return ranked;
+	}
+	
+	private boolean isAlreadyIn(String[] idList, String id) {
+		for (int i = 0; i < idList.length; i++) {
+			if (idList[i] != null && idList[i].equals(id)) {
+				return true;
+			}
+		}
+		return false;
 	}
 	
 	private void buildPlayerStats() {
@@ -79,7 +189,7 @@ public class DBConnection {
 				}
 			}
 			
-			// We know the players already exist now, we can simply increment
+			// We know the players already exist now, we can simply increment the number of wins
 			for (int w = 0; w < winners.length; w++) {
 				playerStats.get(winners[w])[1]++;
 			}
@@ -87,7 +197,6 @@ public class DBConnection {
 		
 		// TODO: CONTINUE - playerStats are pulled down, now need to
 		// calculate playerStats and display.
-		System.out.println(playerStats.toString());
 		
 	}
 	

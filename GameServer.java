@@ -204,7 +204,7 @@ public class GameServer {
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}	
+		}
 	}
 	
 	private void finishGamesThatAreFinished() {

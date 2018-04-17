@@ -23,6 +23,7 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -105,10 +106,19 @@ public class MainWindow implements Runnable, ActionListener {
 		BoxLayout boxUsr = new BoxLayout(pnl1Usr, BoxLayout.Y_AXIS);
 		pnl1Usr.setLayout(boxUsr);
 		lblUserName = new JLabel("<html><h2>" + player.name + "</h2><html>");
-		lblUserStats = new JLabel(String.format("<html>Number of wins: %d<br />" + "Number of Games: %d<br />"
-				+ "Average time to win: %f seconds</html>", 10, 20, 12.5));
+		
+		int[] pStats = client.dbConn.getPlayerStats(player.id);
+		
+		if(pStats == null || pStats[0] == 0) {
+			lblUserStats = new JLabel(String.format("<html>Number of Game: %d<br />" + "Number of Wins: %d<br />"
+					+ "Win Percentage: %f%%</html>", 0,0,0f));
+		
+		}
+		else {
+			lblUserStats = new JLabel(String.format("<html>Number of Game: %d<br />" + "Number of Wins: %d<br />"
+					+ "Win Percentage: %f%%</html>", pStats[0], pStats[1], (float)((float)pStats[1]/(float)pStats[0])));
+		}
 		lblUserRank = new JLabel("<html><h3>Rank: #42</h3></html>");
-
 		pnl1Usr.add(lblUserName);
 		pnl1Usr.add(lblUserStats);
 		pnl1Usr.add(lblUserRank);
@@ -123,15 +133,9 @@ public class MainWindow implements Runnable, ActionListener {
 		pnl2Game.add(btnNewGame);
 
 		// LEADERBOARD
-		GridLayout pnlLayout = new GridLayout();
-		pnl3Ldr.setLayout(pnlLayout);
-		String[] colNames = { "Rank", "Player", "Games Won", "Games Played", "Avg. Winning Time" };
-		Object[][] data = { { 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 },
-				{ 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 },
-				{ 1, "test", 15, 20, 7.01 }, { 1, "test", 15, 20, 7.01 } };
-
-		tblLeader = new JTable(data, colNames);
-		pnl3Ldr.add(tblLeader);
+		
+		updateLeaderBoard();
+		
 
 		// LOGOUT
 		BoxLayout boxLogout = new BoxLayout(pnl4Logout, BoxLayout.Y_AXIS);
@@ -157,6 +161,22 @@ public class MainWindow implements Runnable, ActionListener {
 		main.setLocationRelativeTo(null);
 		main.setVisible(true);
 	}
+	
+	private void updateLeaderBoard() {
+		pnl3Ldr.removeAll();
+		GridLayout pnlLayout = new GridLayout();
+		pnl3Ldr.setLayout(pnlLayout);
+		String[] colNames = { "Rank", "Player", "Games Played", "Games Won", "Win %" };
+		PlayerStats[] pRankings = client.dbConn.getRankedPlayerStats();
+		Object[][] data = new Object[pRankings.length][];
+		
+		for (int i = 0; i < pRankings.length; i++) {
+			data[i] = new Object[]{i + 1, pRankings[i].name, pRankings[i].nGames, pRankings[i].nWins, ""+pRankings[i].winPercentage*100+"%"};
+		}
+		tblLeader = new JTable(data, colNames);
+		pnl3Ldr.add(new JScrollPane(tblLeader));
+		
+	}
 
 	public ImageIcon resizeImage(String filePath, int width, int height) {
 
@@ -177,6 +197,8 @@ public class MainWindow implements Runnable, ActionListener {
 	}
 
 	public void beginGame() {
+		// Get rid of "you won" UI elements.
+		purgeGameUIElements(false);
 		// Disable newgame button
 		btnNewGame.setVisible(false);
 
@@ -260,7 +282,7 @@ public class MainWindow implements Runnable, ActionListener {
 		});
 	}
 
-	public void quitGame(boolean gameOver) {
+	public void purgeGameUIElements(boolean earlyExit) {
 
 		pnlGameOptions.removeAll();
 		pnlGameInput.removeAll();
@@ -272,7 +294,7 @@ public class MainWindow implements Runnable, ActionListener {
 
 		game = null;
 
-		if (!gameOver) {
+		if (earlyExit) {
 			// TODO: Notify server?			
 		}
 		btnNewGame.setVisible(true);
@@ -312,9 +334,9 @@ public class MainWindow implements Runnable, ActionListener {
 		return false;
 	}
 	
-	private void endGame(boolean didPlayerWin) {
+	private void endGame(boolean didPlayerWin, String answer) {
 		// hide all game elements, set null 
-		quitGame(true);
+		purgeGameUIElements(false);
 		client.jmsClient.game = null;
 		
 		// Display game results
@@ -326,9 +348,11 @@ public class MainWindow implements Runnable, ActionListener {
 		lblGameOverText = new JLabel();
 		String txt = "<html><h1>You ";
 		if (didPlayerWin)
-			txt = txt+"Won!</h1></html>";
+			txt = txt+"Won!</h1>";
 		else
-			txt = txt+"Lost!</h1></html>";
+			txt = txt+"Lost!</h1>";
+		
+		txt = txt+"<h3>Answer: "+answer+"</h3></html>";
 		
 		lblGameOverText.setText(txt);
 		
@@ -336,6 +360,7 @@ public class MainWindow implements Runnable, ActionListener {
 		pnlGameOver.add(lblGameOverText);
 		pnlGameOver.add(btnNewGame);
 		pnl2Game.add(pnlGameOver);
+		updateLeaderBoard();
 	}
 
 	@Override
@@ -359,8 +384,8 @@ public class MainWindow implements Runnable, ActionListener {
 			}
 		} else if (arg0.getActionCommand() == "Quit Game") {
 			
-			// false as in, game is not actually over
-			quitGame(false);
+			// true as in, game is not actually over
+			purgeGameUIElements(true);
 		} else if (arg0.getActionCommand() == "Submit Answer") {
 			
 			String answer = gameInput.getText();
@@ -369,7 +394,7 @@ public class MainWindow implements Runnable, ActionListener {
 				client.jmsClient.submitGameAnswer(player, game, answer);
 				System.out.println("Answer Submitted.");
 				
-				endGame(getResult());
+				endGame(getResult(), gameInput.getText());
 				
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block

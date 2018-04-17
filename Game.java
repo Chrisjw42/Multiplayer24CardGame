@@ -238,12 +238,47 @@ public class Game {
 		return null;
 	}*/
 	
+	private boolean isThereSufficientCards(String[] usedCards) {
+		int[] availableCards = cards.clone();
+		
+		for (int i = 0; i < usedCards.length; i++) {
+			// Convert JQKA to int input
+			if (usedCards[i].equals("J"))
+				usedCards[i] = "11";
+			else if (usedCards[i].equals("Q"))
+				usedCards[i] = "12";
+			else if (usedCards[i].equals("K"))
+				usedCards[i] = "13";
+			else if (usedCards[i].equals("A"))
+				usedCards[i] = "1";
+			
+			for (int j = 0; j < availableCards.length; j++) {
+				
+				// nullify the available cards that are used one by one
+				if (availableCards[j] == Integer.parseInt(usedCards[i]))
+				{
+					availableCards[j] = -1;
+					break;
+					
+				}
+				if (j == availableCards.length -1) {
+					// If we get here, then we couldn't find an availabe card to match
+					return false;
+				}
+			}
+		}		
+		return true;
+		
+	}
+	
 	public String calculateGameInput(String input) {
 		input = input.trim();
 		input = input.toUpperCase();
 
 		// Split apart all the elements that were used
 		String[] operands = input.split("[-+*/^()]");
+		String[] usedCards = new String[operands.length];
+		int k = 0;
 		for (int i = 0; i < operands.length; i++) {
 
 			// This can happen with double parens, for example
@@ -254,8 +289,16 @@ public class Game {
 				if (!isCardValid(operands[i])) {
 					return "Card: [" + operands[i] + "] is not in play!";
 				}
+				usedCards[k] = operands[i];
+				k++;
 			}
 		}
+		
+		// Ensure cards are not repeated more than allowed
+		if (!isThereSufficientCards(operands)) {
+			return "You tried to use a card too many times!"; 
+		}
+				
 
 		// At this point, we are happy that the values used are actually available in
 		// this game
