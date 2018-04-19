@@ -64,6 +64,16 @@ public class DBConnection {
 		}
 	}
 	
+	public int getSpecificPlayerRank(String name) {
+		PlayerStats[] pStats = getRankedPlayerStats();
+		for (int i = 0; i < pStats.length; i++) {
+			if (name.equals(pStats[i].name)) {
+				return i+1; // zero indexing
+			}
+		}
+		return -1; // Unknown rank indicator
+	}
+	
 	public PlayerStats[] getRankedPlayerStats() {
 		buildPlayerStats();
 		LinkedList<String[]> dbPlayers = listPlayers();

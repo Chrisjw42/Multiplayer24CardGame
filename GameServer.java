@@ -106,14 +106,17 @@ public class GameServer {
 	public void manageGames() throws InterruptedException {
 
 		while (true) {
-			System.out.println("Running Game management loop");
+			System.out.println("== Running Game management loop");
+			System.out.println(" # Potential Games: "+localPotentialGames.size());
 
 			activateGamesThatAreReady();
 
 			// attempt to organise current players into games in to games
+			int nWaitingPlayers = localPlayerQueue.size();
 			if (localPlayerQueue.size() > 0) {
-				System.out.println("Local player queue is > 0");
-				for (int p = 0; p < localPlayerQueue.size(); p++) {
+				System.out.println("Local player queue is bigger than 0: "+nWaitingPlayers);
+				
+				for (int p = 0; p < nWaitingPlayers; p++) {
 
 					// Message is delivered as csv
 					String msg = localPlayerQueue.pop();
@@ -130,15 +133,16 @@ public class GameServer {
 					}
 
 					boolean gameFound = false;
+					System.out.println("Potential games in queue: " + localPotentialGames.size());
 					for (int g = 0; g < localPotentialGames.size(); g++) {
 						PotentialGame pg = localPotentialGames.get(g);
-						System.out.println("Potential games in queue: " + localPotentialGames.size());
+						System.out.println("Checking a game...");
 						if (pg.game.isTherASpareSlot()) {
 							// Ding Ding! Spare slot available for this player
 							System.out.println("Game found for: " + newPlayer.id);
 							gameFound = true;
 							pg.game.addPlayer(newPlayer);
-							//pg.ResetWaitingTime();
+							System.out.println("Players in this game: ");
 							pg.game.printPlayers();
 						}
 					}
@@ -157,7 +161,7 @@ public class GameServer {
 				// System.err.println("Trying to receive playerqueue");
 				LinkedList<String> msgs = receiveMessages(playerQueue);
 				localPlayerQueue = extend(localPlayerQueue, msgs);
-				System.out.println("Local player queue size: " + localPlayerQueue.size());
+				//System.out.println("Local player queue size: " + localPlayerQueue.size());
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
