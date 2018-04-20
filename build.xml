@@ -1,0 +1,55 @@
+<project name="Tutorial 8.2" basedir="" default="all">
+	
+	<property name="PostFix.src" value="PostFix"/>
+	<property name="PostFixGUI.src" value="PostFixGUI"/>
+	
+	<property name="build.dir" value="build"/>
+	<property name="tmp.dir" value="${build.dir}/tmp"/>
+		
+    <target name="clean">
+        <delete includeemptydirs="true">
+            <fileset dir="${build.dir}"/>
+        </delete>
+    </target>
+	
+    <target name="pre-build">
+        <mkdir dir="${build.dir}"/>
+    	<mkdir dir="${tmp.dir}"/>
+    </target>
+
+    <target name="PostFix.compile" depends="pre-build">
+    	<mkdir dir="${tmp.dir}/PostFix"/>
+        <javac destdir="${tmp.dir}/PostFix" includeantruntime="false">
+    		<src path="${PostFix.src}"/>
+    	</javac>
+	</target>
+	
+    <target name="PostFix.jar" depends="PostFix.compile">
+        <jar destfile="${build.dir}/PostFix.jar" basedir="${tmp.dir}/PostFix">
+        	<fileset dir="${PostFix.src}"/>
+        </jar>
+    </target>
+	
+     <target name="PostFixGUI.compile" depends="PostFix.jar">
+    	<mkdir dir="${tmp.dir}/PostFixGUI"/>
+    	<copy file="logo.png" todir="${tmp.dir}/PostFixGUI"/>
+        <javac destdir="${tmp.dir}/PostFixGUI" includeantruntime="false">
+        	<src path="${PostFixGUI.src}"/>
+        	<classpath>
+    	        <pathelement path="${build.dir}/PostFix.jar"/>
+    	    </classpath>
+    	</javac>
+
+	</target>
+
+   <target name="PostFixGUI.jar" depends="PostFixGUI.compile">
+        <jar destfile="${build.dir}/PostFixGUI.jar" basedir="${tmp.dir}/PostFixGUI">
+        	<fileset dir="${PostFixGUI.src}"/>
+        </jar>
+    </target>
+	
+    <target name="all" depends="PostFixGUI.jar">
+    	<delete dir="${tmp.dir}" />
+	</target>
+
+</project>

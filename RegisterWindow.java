@@ -97,7 +97,7 @@ public class RegisterWindow implements Runnable, ActionListener {
 			return;
 		}
 		else if (!uPwd.equals(uPwd2)) {
-			JOptionPane.showMessageDialog(null, "Error: Pawsswords must match!");
+			JOptionPane.showMessageDialog(null, "Error: Passwords must match!");
 			return;
 		}
 		
@@ -105,7 +105,8 @@ public class RegisterWindow implements Runnable, ActionListener {
 			if (parentClient.attemptRegister(uName, uPwd)) {
 				parentClient.loginFrame.setEnabled(true);
 				registerFrame.setVisible(false);
-				registerFrame.dispose();				
+				registerFrame.dispose();
+				JOptionPane.showMessageDialog(null, "Congratulations! Please log in.");
 			}
 		}
 	}

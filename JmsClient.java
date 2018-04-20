@@ -140,9 +140,11 @@ public class JmsClient {
 		
 		// TODO: utilise the general method "observerqueue" here
 		// Read queue without consuming messages
+		System.out.println("pre getEnumeration");
 		QueueBrowser queueBrowser = sess.createBrowser(activeGameQueue);
 		Enumeration msgs = queueBrowser.getEnumeration();
 
+		System.out.println("post getEnumeration");
 		// Get every game in the list
 		while (msgs.hasMoreElements()) {
 			String thisGame;
@@ -182,13 +184,15 @@ public class JmsClient {
 		if (game == null) {
 			// Add player to the list of seeking players
 			enqueuePlayer(player);
-			System.out.println("Getting Game for: " + player.name);
+			System.out.println("GettingsGame for: " + player.name);
 
 			// Every 1 second, try and read available game list
 			while (game == null) {
+				System.out.println("Checking activeGame list...");
 				game = findActiveGameWithPlayer(player);
 				TimeUnit.SECONDS.sleep(1);
 			}
+			
 		}
 		return game;
 	}

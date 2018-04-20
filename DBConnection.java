@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Random;
 
 public class DBConnection {
-	private static final String DB_HOST = "localhost";
+	private static final String DB_HOST = "localhost"; 
 	private static final String DB_USER = "c0402@localhost";
 	private static final String DB_PASS = "c0402PASS";
 	private static final String DB_NAME = "c0402";
@@ -33,7 +33,7 @@ public class DBConnection {
 		Class.forName("com.mysql.jdbc.Driver").newInstance();
 		conn = DriverManager
 				.getConnection("jdbc:mysql://" + DB_HOST + "/" + DB_NAME + "?user=" + DB_USER + "&password=" + DB_PASS);
-		System.out.println("DB Connected successfully");
+		System.out.println("DB Connected successfully123");
 		rng = new Random();
 		buildPlayerStats();
 		testPrintPlayerStats();

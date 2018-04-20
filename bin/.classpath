@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="C:/Users/chris/GoogleDrive/uni/2018 HKU T2/COMP3402 - System Architecture &amp; Distributed Computing/glassfish-4.1.2/glassfish4/glassfish/lib/gf-client.jar"/>
+	<classpathentry kind="lib" path="C:/Users/chris/GoogleDrive/uni/2018 HKU T2/COMP3402 - System Architecture &amp; Distributed Computing/glassfish-4.1.2/glassfish4/glassfish/lib/javaee.jar"/>
+	<classpathentry kind="lib" path="C:/Users/chris/GoogleDrive/uni/2018 HKU T2/COMP3402 - System Architecture &amp; Distributed Computing/glassfish-4.1.2/glassfish4/glassfish/lib/jndi-properties.jar"/>
+	<classpathentry kind="lib" path="C:/Program Files/MySQL/mysql-connector-java-5.1.45-bin.jar"/>
+	<classpathentry kind="output" path=""/>
+</classpath>

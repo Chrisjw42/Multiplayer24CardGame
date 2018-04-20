@@ -475,7 +475,7 @@ public class GameServer {
 		// Get every game in the list
 		while (msgs.hasMoreElements()) {
 			String thisMsg;
-			try {
+			try { 
 				thisMsg = ((TextMessageImpl) msgs.nextElement()).getText();
 				msgsReturn.add(thisMsg);
 			} catch (ClassCastException e) {

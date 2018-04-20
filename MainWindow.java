@@ -28,6 +28,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 import javax.swing.border.Border;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
@@ -206,11 +207,23 @@ public class MainWindow implements Runnable, ActionListener {
 
 	public void beginGame() {
 		// Get rid of "you won" UI elements.
+		
 		purgeGameUIElements(false);
+		
+		btnNewGame.setVisible(false);
 
+		System.out.println("Finding a game, please wait...");
+		JLabel loading = new JLabel("Finding a game, please wait...");
+		pnl2Game.add(loading);
+		loading.setVisible(true);
+		pnl2Game.repaint();
+		
 		// get a game object from the server
 		game = getGame();
 
+		pnl2Game.remove(loading);
+		loading = null;
+		
 		// Set up game UI elements
 		gameCardLabels = new JLabel[4];
 		gameCardImages = new ImageIcon[4];
@@ -318,6 +331,8 @@ public class MainWindow implements Runnable, ActionListener {
 				gameInputFeedback.setText("= "+game.calculateGameInput(text));
 			}
 		});
+		
+		pnl2Game.repaint();
 	}
 
 	public void purgeGameUIElements(boolean earlyExit) {
@@ -335,14 +350,15 @@ public class MainWindow implements Runnable, ActionListener {
 		//return client.dbConn.getTestGame();
 
 		try {
-			
+			System.out.println("Initiating JMS client");
 			Game serverResponse = client.jmsClient.getGame(player);
-			
+			System.out.println("JMS client response received");
 			return serverResponse;
 		} catch (JMSException | InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
 		return null;
 	}
 	
@@ -405,33 +421,44 @@ public class MainWindow implements Runnable, ActionListener {
 			if(pnlGameOver != null) {
 				pnlGameOver.removeAll();
 				pnlGameOver = null;
-			}
+			}		
 			
+			SwingWorker myWorker= new SwingWorker<Void, String>() {
+			    @Override
+			    protected Void doInBackground() throws Exception {
+			    	// TODO: Some kind of "try again" situation
+			    	beginGame();
+					return null;
+			    }
+			};
+			myWorker.execute();
 			
-			game = getGame();
-			if (game != null) {
-				beginGame();
-			} else {
-				// TODO: "sorry try again" message
-			}
 		} else if (arg0.getActionCommand() == "Quit Game") {
 			
 			// true as in, game is not actually over
 			purgeGameUIElements(true);
 		} else if (arg0.getActionCommand() == "Submit Answer") {
 			
-			String answer = gameInput.getText();
-			answer = game.calculateGameInput(answer);
-			try {
-				client.jmsClient.submitGameAnswer(player, game, answer);
-				System.out.println("Answer Submitted.");
-				
-				endGame(getResult(), gameInput.getText());
-				
-			} catch (JMSException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			SwingWorker myWorker= new SwingWorker<Void, String>() {
+			    @Override
+			    protected Void doInBackground() throws Exception {
+			    	String answer = gameInput.getText();
+					answer = game.calculateGameInput(answer);
+					try {
+						btnGameSubmit.setVisible(false);
+						pnlGameInput.add(new JLabel("Awaiting Results..."));
+						client.jmsClient.submitGameAnswer(player, game, answer);
+						System.out.println("Answer Submitted.");
+						endGame(getResult(), gameInput.getText());
+						
+					} catch (JMSException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					return null;
+			    }
+			};
+			myWorker.execute();
 		}		
 	}
 }
