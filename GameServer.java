@@ -26,19 +26,17 @@ public class GameServer {
 	private ConnectionFactory connectionFactory;
 	private Connection conn;
 	private Session sess;
-	private LinkedList<String> localPlayerQueue;
-	private LinkedList<PotentialGame> localPotentialGames;
-	private LinkedList<String> localGameInputs;
-	private LinkedList<Game> localActiveGames;
+	private LinkedList<String> serverPlayerQueue;
+	private LinkedList<PotentialGame> serverPotentialGameQueue;
+	private LinkedList<String> serverGameInputQueue;
+	private LinkedList<Game> serverActiveGameQueue;
 	
 	private Queue playerQueue;
 	private Queue activeGameQueue;
 	private Queue gameInputQueue;
 	private Queue gameResultQueue;
-
 	private MessageProducer activeGameQueueSender;
 	private MessageProducer gameResultQueueSender;
-	
 	private MessageConsumer queueReceiver;
 	
 	private DBConnection dbConn;
@@ -80,10 +78,10 @@ public class GameServer {
 			System.exit(-1);
 		}
 
-		localPlayerQueue = new LinkedList<String>();
-		localPotentialGames = new LinkedList<PotentialGame>();
-		localActiveGames = new LinkedList<Game>();
-		localGameInputs = new LinkedList<String>();
+		serverPlayerQueue = new LinkedList<String>();
+		serverPotentialGameQueue = new LinkedList<PotentialGame>();
+		serverActiveGameQueue = new LinkedList<Game>();
+		serverGameInputQueue = new LinkedList<String>();
 		
 		queueReceiver = null;
 
@@ -107,19 +105,19 @@ public class GameServer {
 
 		while (true) {
 			System.out.println("== Running Game management loop");
-			System.out.println(" # Potential Games: "+localPotentialGames.size());
+			System.out.println(" # Potential Games: "+serverPotentialGameQueue.size());
 
 			activateGamesThatAreReady();
 
 			// attempt to organise current players into games in to games
-			int nWaitingPlayers = localPlayerQueue.size();
-			if (localPlayerQueue.size() > 0) {
+			int nWaitingPlayers = serverPlayerQueue.size();
+			if (serverPlayerQueue.size() > 0) {
 				System.out.println("Local player queue is bigger than 0: "+nWaitingPlayers);
 				
 				for (int p = 0; p < nWaitingPlayers; p++) {
 
 					// Message is delivered as csv
-					String msg = localPlayerQueue.pop();
+					String msg = serverPlayerQueue.pop();
 
 					Player newPlayer;
 					try {
@@ -133,9 +131,9 @@ public class GameServer {
 					}
 
 					boolean gameFound = false;
-					System.out.println("Potential games in queue: " + localPotentialGames.size());
-					for (int g = 0; g < localPotentialGames.size(); g++) {
-						PotentialGame pg = localPotentialGames.get(g);
+					System.out.println("Potential games in queue: " + serverPotentialGameQueue.size());
+					for (int g = 0; g < serverPotentialGameQueue.size(); g++) {
+						PotentialGame pg = serverPotentialGameQueue.get(g);
 						System.out.println("Checking a game...");
 						if (pg.game.isTherASpareSlot()) {
 							// Ding Ding! Spare slot available for this player
@@ -150,7 +148,7 @@ public class GameServer {
 					if (gameFound == false) {
 						// There was no available game for this player, make a new one
 						PotentialGame pg = new PotentialGame(newPlayer);
-						localPotentialGames.add(pg);
+						serverPotentialGameQueue.add(pg);
 						System.out.println("No available games for " + newPlayer.id + ", created a new one.");
 					}
 				}
@@ -160,7 +158,7 @@ public class GameServer {
 			try {
 				// System.err.println("Trying to receive playerqueue");
 				LinkedList<String> msgs = receiveMessages(playerQueue);
-				localPlayerQueue = extend(localPlayerQueue, msgs);
+				serverPlayerQueue = extend(serverPlayerQueue, msgs);
 				//System.out.println("Local player queue size: " + localPlayerQueue.size());
 			} catch (JMSException e) {
 				// TODO Auto-generated catch block
@@ -187,12 +185,12 @@ public class GameServer {
 	 * Handle all gameinput that has been received
 	 */
 	private void processGameInput() {
-		System.out.println("ProcessGameInput, " + localActiveGames.size() + " active games");
+		System.out.println(" # Active Games: "+ serverActiveGameQueue.size());
 		LinkedList<String> msgs;
 		// pull down queue
 		try {
 			msgs = receiveMessages(gameInputQueue);
-			localGameInputs = extend(localGameInputs, msgs);
+			serverGameInputQueue = extend(serverGameInputQueue, msgs);
 		} catch (JMSException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -213,20 +211,20 @@ public class GameServer {
 	
 	private void finishGamesThatAreFinished() {
 		// if all players have answered, calculate gameresults, add []
-		int nGames = localActiveGames.size();
+		int nGames = serverActiveGameQueue.size();
 		if(nGames == 0)
 			return;
 		
 		System.out.println("Local Active Games: "+nGames);
 		for (int i = 0; i < nGames; i++) {
-			Game g = localActiveGames.get(i);
+			Game g = serverActiveGameQueue.get(i);
 			if (g.haveAllPlayersAnswered()) {
 				System.out.println("All player have answered in a game, finishing.");
 				// Create GameResults
 				processGameResult(new GameResult(g, g.getWinners()));
 				
 				// Remove this game from the localActiveGame queue, break the loop to avoid weird indexing
-				localActiveGames.remove(i);
+				serverActiveGameQueue.remove(i);
 				return;
 			}
 		}	
@@ -280,9 +278,9 @@ public class GameServer {
 		String[] components = msg.split(",");
 		Game relevantGame = null;
 		
-		for (int i = 0; i< localActiveGames.size(); i++) {
-			if (localActiveGames.get(i).getId().equals(components[1])) {
-				relevantGame = localActiveGames.get(i);				
+		for (int i = 0; i< serverActiveGameQueue.size(); i++) {
+			if (serverActiveGameQueue.get(i).getId().equals(components[1])) {
+				relevantGame = serverActiveGameQueue.get(i);				
 			}
 		}
 		// Find which slot this player sits in, and set the answer accordingly
@@ -297,7 +295,7 @@ public class GameServer {
 		LinkedList<String> msgs = receiveMessages(activeGameQueue);
 		for (int i = 0; i < msgs.size(); i++) {
 			// Pull all the activeGames from the list, and add them to the local activeGameList
-			localActiveGames.add(decodeGameMessage(msgs.get(i)));
+			serverActiveGameQueue.add(decodeGameMessage(msgs.get(i)));
 		}
 	}
 	
@@ -355,13 +353,13 @@ public class GameServer {
 		// activeGameQueueSender.send(sess.createMessage()); 
 
 		// Now that game is activated, we can remove it from the local potentialGame list
-		localPotentialGames.remove(indexInLocalList);
+		serverPotentialGameQueue.remove(indexInLocalList);
 	}
 
 	private void activateGamesThatAreReady() {
 		// games that have waited long enough can start
-		for (int g = 0; g < localPotentialGames.size(); g++) {
-			PotentialGame thisPg = localPotentialGames.get(g);
+		for (int g = 0; g < serverPotentialGameQueue.size(); g++) {
+			PotentialGame thisPg = serverPotentialGameQueue.get(g);
 
 			// If waiting longer than 10 sec, and > 1 player...
 			if (thisPg.waitingTime > 10 && thisPg.game.getNumberOfPlayers() > 1) {
@@ -381,8 +379,8 @@ public class GameServer {
 	private void incrementTimers(int i) throws InterruptedException {
 		//TimeUnit.SECONDS.sleep(i);
 		// Increment game waiting timers by one second
-		for (int g = 0; g < localPotentialGames.size(); g++) {
-			localPotentialGames.get(g).incrementWaitingTime(i);
+		for (int g = 0; g < serverPotentialGameQueue.size(); g++) {
+			serverPotentialGameQueue.get(g).incrementWaitingTime(i);
 		}
 	}
 

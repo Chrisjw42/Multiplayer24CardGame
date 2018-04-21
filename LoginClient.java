@@ -20,7 +20,7 @@ import javax.swing.SwingUtilities;
 public class LoginClient implements Runnable, ActionListener {
 
 	public static void main(String[] args) {
-		SwingUtilities.invokeLater(new LoginClient(args[0]));
+		SwingUtilities.invokeLater(new LoginClient("localhost"));
 	}
 
 	// private JLabel wordCountLabel;

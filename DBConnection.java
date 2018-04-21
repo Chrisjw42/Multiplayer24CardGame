@@ -33,10 +33,10 @@ public class DBConnection {
 		Class.forName("com.mysql.jdbc.Driver").newInstance();
 		conn = DriverManager
 				.getConnection("jdbc:mysql://" + DB_HOST + "/" + DB_NAME + "?user=" + DB_USER + "&password=" + DB_PASS);
-		System.out.println("DB Connected successfully123");
+		System.out.println("DB Connected successfully");
 		rng = new Random();
 		buildPlayerStats();
-		testPrintPlayerStats();
+		//testPrintPlayerStats();
 	}
 	
 	private void testPrintPlayerStats() {
@@ -151,7 +151,7 @@ public class DBConnection {
 			if (index != -1){
 				indicies.add(index);
 				in[i] = id;
-				System.err.println("Rank "+i+" is: "+id);
+				//System.err.println("Rank "+i+" is: "+id);
 			}			
 		}	
 		

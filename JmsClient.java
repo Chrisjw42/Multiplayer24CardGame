@@ -140,11 +140,9 @@ public class JmsClient {
 		
 		// TODO: utilise the general method "observerqueue" here
 		// Read queue without consuming messages
-		System.out.println("pre getEnumeration");
 		QueueBrowser queueBrowser = sess.createBrowser(activeGameQueue);
 		Enumeration msgs = queueBrowser.getEnumeration();
 
-		System.out.println("post getEnumeration");
 		// Get every game in the list
 		while (msgs.hasMoreElements()) {
 			String thisGame;
@@ -156,14 +154,14 @@ public class JmsClient {
 				continue; // Skip this iteration
 			}
 
-			System.out.println(thisGame);
+			//System.out.println(thisGame);
 
 			Game g = decodeGameMessage(thisGame);
 
 			// For this game, we check if any of the players match the player we are
 			// searching for
 			for (int i = 0; i < 4; i++) {
-				System.out.println(g.getPlayers()[i].id);
+				//System.out.println(g.getPlayers()[i].id);
 				if (g.getPlayers()[i].id.equals(player.id)) {
 					// ding ding!
 					System.out.println("Player: " + player.id + " has found their game, and "
